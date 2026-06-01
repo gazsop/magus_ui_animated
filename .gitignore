@@ -1,0 +1,4 @@
+package-lock.json
+node_modules
+public/torvenykonyv.pdf
+src/data/sql

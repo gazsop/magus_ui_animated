@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#000000" />
+		<link rel="stylesheet" href="/src/index.css" />
+    <title>M.A.G.U.S.</title>
+  </head>
+  <body class="font-mono text-xs">
+    <div id="app"></div>
+		<script>
+      const global = globalThis;
+		</script>
+    <script type="module" src="/src/index.tsx"></script>
+		<script>
+			if (window.location.pathname !== "/") {
+				window.location.pathname = "/";
+			}
+			window.addEventListener('beforeunload', (event) => {
+					console.log("beforeunload");
+					//event.returnValue = 'Please do not close the tab';
+					//event.preventDefault();
+			});
+
+			//setTimeout(() => {
+			//	debugger;
+			//}, 10000);
+		</script>
+		
+  </body>
+</html>
