@@ -1,13 +1,11 @@
 import { FlexCol, FlexRow } from "@components/Flex";
 
 const DEFAULT_KEYWORDS = [
-  "Világ",
-  "Rendek",
-  "Mágia",
-  "Vallások",
+  "Klasszok",
   "Fajok",
-  "Kasztok",
-  "Helyszínek",
+  "Személyiségek",
+  "Vallások",
+  "Térkép",
 ];
 
 const DEFAULT_ENTRIES = [

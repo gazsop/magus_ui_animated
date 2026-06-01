@@ -72,6 +72,24 @@ export function SecondaryStatLevelsElement({
             }}
             widthOverride="w-20"
           />
+          <InputUnq
+            id={`secondaryStat-${stat.id}-note`}
+            key={`secondaryStat-${stat.id}-note`}
+            label={"note"}
+            value={stat.note || ""}
+            onBlur={(e) => {
+              const value = e.currentTarget.value;
+              setSecondaryStats((prev) => {
+                const next = [...prev];
+                next[index] = {
+                  ...next[index],
+                  note: value,
+                };
+                return next;
+              });
+            }}
+            widthOverride="w-48"
+          />
         </FlexRow>
       ))}
     </FlexCol>

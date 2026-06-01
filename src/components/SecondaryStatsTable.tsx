@@ -55,7 +55,17 @@ export default function SecondaryStatsTable({
               key={`secondary-stat-${row.current.id || row.currentSourceIndex}-${row.name}`}
               className="border-t border-slate-400/30"
             >
-              <td className="p-0.5 break-words font-semibold min-w-0">{row.name}</td>
+              <td className="p-0.5 break-words font-semibold min-w-0">
+                {row.name}
+                {row.note ? (
+                  <span
+                    className="ml-1 inline-flex h-4 w-4 cursor-help select-none items-center justify-center rounded-full bg-red-700 text-[10px] font-bold leading-none text-white"
+                    title={row.note}
+                  >
+                    !
+                  </span>
+                ) : null}
+              </td>
               <td className="p-0.5 min-w-0 break-words">
                 {renderLevelCell
                   ? renderAnnotatedValue(renderLevelCell(row), row.futureLevelText)

@@ -22,7 +22,7 @@ export default function CharacterSpellsPanel({
           <p>No spells for current class.</p>
         ) : (
           spells.map((spell) => (
-            <div key={`spell-${spell.id}`} className="fancy-container p-0.5">
+            <div key={`spell-${spell.id}`} className="fancy-container p-0.5 select-none">
               <p className="font-semibold break-words">{spell.name}</p>
               <p className="text-xs break-words">
                 Lvl: {spell.lvlReq} | Cost: {spell.resourceCost}

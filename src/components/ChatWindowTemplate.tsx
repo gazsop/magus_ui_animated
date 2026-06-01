@@ -6,7 +6,7 @@ import RndContainer from "@components/RndContainer";
 export type TChatWindowMessage = {
   id: string;
   author: string;
-  content: string;
+  content: string | JSX.Element;
   side: "self" | "other";
 };
 
@@ -95,7 +95,11 @@ export default function ChatWindowTemplate({
               <p className="font-bold opacity-70 mb-0.5 text-[10px] uppercase tracking-wider">
                 {message.author}
               </p>
-              <p className="whitespace-pre-wrap break-words">{message.content}</p>
+              {typeof message.content === "string" ? (
+                <p className="whitespace-pre-wrap break-words">{message.content}</p>
+              ) : (
+                <div className="whitespace-pre-wrap break-words">{message.content}</div>
+              )}
             </div>
           ))}
           {loadingLabel ? (

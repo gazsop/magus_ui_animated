@@ -57,7 +57,7 @@ export default function CharacterSpecializationModal({
     return (
       <button
         type="button"
-        className={`fancy-container p-2 text-left min-h-[280px] flex flex-col gap-2 border ${
+        className={`fancy-container p-2 text-left min-h-[280px] flex flex-col gap-2 border cursor-pointer select-none ${
           isSelected ? "border-amber-300 bg-amber-950/40" : "border-slate-500"
         }`}
         onClick={() => onSelect(specName)}

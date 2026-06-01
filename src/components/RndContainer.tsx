@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { createContext } from "preact";
+import { useContext, useEffect, useRef, useState } from "preact/hooks";
 import { DraggableData, Rnd, RndDragEvent } from "react-rnd";
 import { FlexRow, FlexCol } from "./Flex";
 import RefreshCwIcon from "./icons/general/RefreshCwIcon";
 import MoveIcon from "./icons/general/MoveIcon";
 import MaximizeIcon from "./icons/general/MaximizeIcon";
+import MinimizeIcon from "./icons/general/MinimizeIcon";
 import XIcon from "./icons/general/XIcon";
 import FancyWindow from "./FancyWindow";
 import { JSX } from "preact";
@@ -19,10 +21,15 @@ const xOff = {
 
 const MIN_WINDOW_SIZE = 240;
 
+export const RndWindowControlsContext = createContext<{
+  minimize?: () => void;
+} | null>(null);
+
 function RndContainer({
   id,
   aditionalIcons,
   close,
+  minimize,
   label,
   children,
   onDragStart,
@@ -33,6 +40,7 @@ function RndContainer({
   id: string;
   aditionalIcons: JSX.Element | null;
   close: () => void;
+  minimize?: () => void;
   label: string;
   children: JSX.Element | JSX.Element[];
   onDragStart?: (e: RndDragEvent) => void;
@@ -40,6 +48,8 @@ function RndContainer({
   className?: string;
   hideClose?: boolean;
 }) {
+  const inheritedControls = useContext(RndWindowControlsContext);
+  const effectiveMinimize = minimize ?? inheritedControls?.minimize;
   const getViewportSize = () => ({
     width: Math.floor(window.visualViewport?.width || window.innerWidth),
     height: Math.floor(window.visualViewport?.height || window.innerHeight),
@@ -240,6 +250,11 @@ function RndContainer({
                 }`}
                 onClick={() => setResizeable((prev) => !prev)}
               />
+              {effectiveMinimize ? (
+                <span onClick={effectiveMinimize}>
+                  <MinimizeIcon className="h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer" />
+                </span>
+              ) : null}
               {!hideClose && (
                 <XIcon className="h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer" onClick={close} />
               )}

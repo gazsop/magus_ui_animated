@@ -1,6 +1,7 @@
 import { createContext } from "preact";
 import { JSX } from "preact/jsx-runtime";
-import { useContext, useEffect, useState } from "preact/hooks";
+import { useContext, useEffect, useRef, useState } from "preact/hooks";
+import AppModal from "@components/AppModal";
 import { reportClientError } from "../core/api/errorReporter";
 
 type TErrorContext = {
@@ -21,6 +22,7 @@ const ErrorContext = createContext<TErrorContext>({
 
 export function ErrorProvider(props: { children: JSX.Element | JSX.Element[] }) {
   const [error, setError] = useState<string | null>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const setErrorWithPolicy: TErrorContext["setError"] = (value, options = {}) => {
     if (!value) {
       setError(null);
@@ -33,86 +35,12 @@ export function ErrorProvider(props: { children: JSX.Element | JSX.Element[] }) 
       message: value,
     });
     if (import.meta.env.DEV || severity === "blocking") {
-      setError(value);
+      setError((current) => (current ? `${current}\n${value}` : value));
     }
   };
 
   useEffect(() => {
-    if (error) {
-      if (document.getElementById("error-container")) {
-        const errorText = document.getElementById("error-text");
-        if (errorText) {
-          errorText.textContent = `${errorText.textContent}\n${error}`;
-        }
-        return;
-      }
-      const errorContainer = document.createElement("div");
-      const errorWindow = document.createElement("div");
-      const errorTextContainer = document.createElement("div");
-      const errorText = document.createElement("p");
-      const errorHr = document.createElement("hr");
-      const label = document.createElement("label");
-      const closeBtn = document.createElement("button");
-
-      label.textContent = "Error";
-      label.classList.add("text-xl", "font-bold", "mb-2");
-      errorHr.classList.add("fancy");
-      errorContainer.id = "error-container";
-      errorContainer.classList.add(
-        "fixed",
-        "top-0",
-        "left-0",
-        "w-full",
-        "h-full",
-        "bg-black",
-        "bg-opacity-50",
-        "z-50"
-      );
-      errorWindow.classList.add(
-        "flex",
-        "flex-col",
-        "fixed",
-        "top-1/2",
-        "left-1/2",
-        "transform",
-        "-translate-x-1/2",
-        "-translate-y-1/2",
-        "bg-white",
-        "p-4",
-        "rounded-md",
-        "shadow-md",
-        "w-[min(400px,95vw)]",
-        "max-w-[95vw]",
-        "max-h-[90vh]",
-        "min-h-[160px]",
-        "fancy-container",
-        "justify-stretch",
-        "items-stretch",
-        "select-none"
-      );
-      errorWindow.style.backgroundColor = "rgba(120, 64, 0, 0.9)";
-      errorTextContainer.classList.add("overflow-auto", "flex-grow");
-      errorText.classList.add("text-lg", "break-words", "whitespace-pre-wrap");
-      errorText.textContent = error;
-      errorText.id = "error-text";
-      closeBtn.textContent = "Close";
-      closeBtn.addEventListener("click", () => {
-        errorContainer.remove();
-        setErrorWithPolicy(null);
-      });
-
-      errorWindow.appendChild(label);
-      errorWindow.appendChild(errorHr);
-      errorTextContainer.appendChild(errorText);
-      errorWindow.appendChild(errorTextContainer);
-      errorWindow.appendChild(closeBtn);
-      errorContainer.appendChild(errorWindow);
-      document.body.appendChild(errorContainer);
-      closeBtn.focus();
-    } else {
-      const errorContainer = document.getElementById("error-container");
-      if (errorContainer) errorContainer.remove();
-    }
+    if (error) closeRef.current?.focus();
   }, [error]);
 
   useEffect(() => {
@@ -129,7 +57,11 @@ export function ErrorProvider(props: { children: JSX.Element | JSX.Element[] }) 
         },
       });
       if (import.meta.env.DEV) {
-        setError(event.message || "Unhandled window error");
+        setError((current) =>
+          current
+            ? `${current}\n${event.message || "Unhandled window error"}`
+            : event.message || "Unhandled window error"
+        );
       }
     };
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -149,13 +81,13 @@ export function ErrorProvider(props: { children: JSX.Element | JSX.Element[] }) 
         },
       });
       if (import.meta.env.DEV) {
-        setError(
+        const message =
           reason instanceof Error
             ? reason.message
             : typeof reason === "string"
               ? reason
-              : "Unhandled promise rejection"
-        );
+              : "Unhandled promise rejection";
+        setError((current) => (current ? `${current}\n${message}` : message));
       }
     };
 
@@ -170,6 +102,28 @@ export function ErrorProvider(props: { children: JSX.Element | JSX.Element[] }) 
   return (
     <ErrorContext.Provider value={{ error, setError: setErrorWithPolicy }}>
       {props.children}
+      {error ? (
+        <AppModal
+          id="error-container"
+          label="Error"
+          widthClass="w-[min(400px,95vw)]"
+          actions={
+            <button
+              ref={closeRef}
+              type="button"
+              onClick={() => setErrorWithPolicy(null)}
+            >
+              Close
+            </button>
+          }
+        >
+          <div className="overflow-auto flex-grow">
+            <p id="error-text" className="text-lg break-words whitespace-pre-wrap">
+              {error}
+            </p>
+          </div>
+        </AppModal>
+      ) : null}
     </ErrorContext.Provider>
   );
 }

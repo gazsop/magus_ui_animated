@@ -21,7 +21,7 @@ type TChatTarget = { uid: string; name: string };
 type TTypingUsersByTarget = Record<string, Record<string, number>>;
 type TDirectMessage = { fromUid: string; toUid: string; text: string; createdAt: number };
 type TPresenceEvent = { uid: string; createdAt: number; json: { state: string; createdAt: number } };
-type TAllRoomMessage = { id: string; uid: string; text: string; createdAt: number };
+type TAllRoomMessage = ServerApi.ChatRoutes.AllRoomMessage;
 
 const CHAT_TYPING_PING_INTERVAL_MS = 2500;
 const CHAT_TYPING_VISIBLE_MS = 4000;
@@ -31,6 +31,7 @@ const LOGGED_IN_PAGES: PageState[] = [
   PageState.ADMIN,
   PageState.DEV,
 ];
+const YNEV_COORDINATE_PATTERN = /(x:\s*(-?\d+(?:\.\d+)?),\s*y:\s*(-?\d+(?:\.\d+)?))/i;
 
 type TChatWindowsContext = {
   renderChatWindow: (
@@ -110,6 +111,44 @@ export function ChatWindowsProvider({
   const [allRoomMessages, setAllRoomMessages] = useState<TAllRoomMessage[]>([]);
   const [typingByTarget, setTypingByTarget] = useState<TTypingUsersByTarget>({});
   const typingPingRef = useRef<Record<string, number>>({});
+
+  const openYnevAtCoordinates = (x: number, y: number) => {
+    if (!activeAdventureId || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    window.dispatchEvent(
+      new CustomEvent("ynev:jump", {
+        detail: {
+          advId: activeAdventureId,
+          x,
+          y,
+          nonce: String(Date.now()),
+        },
+      })
+    );
+  };
+
+  const renderAllRoomContent = (message: TAllRoomMessage) => {
+    const match = YNEV_COORDINATE_PATTERN.exec(message.text);
+    if (!match) return message.text;
+    const full = match[1];
+    const x = Number(match[2]);
+    const y = Number(match[3]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return message.text;
+    const before = message.text.slice(0, match.index);
+    const after = message.text.slice(match.index + full.length);
+    return (
+      <>
+        {before}
+        <button
+          type="button"
+          className="underline text-sky-300 hover:text-sky-100"
+          onClick={() => openYnevAtCoordinates(x, y)}
+        >
+          {full}
+        </button>
+        {after}
+      </>
+    );
+  };
 
   const clearTypingUser = (targetUid: string, typingUid: string) => {
     setTypingByTarget((prev) => {
@@ -206,7 +245,7 @@ export function ChatWindowsProvider({
         ? allRoomMessages.map((m) => ({
             id: m.id,
             author: m.uid === selfUid ? "Me" : m.uid,
-            content: m.text,
+            content: renderAllRoomContent(m),
             side: m.uid === selfUid ? "self" : "other",
           }))
         : (threads[uid] || []).map((m, idx) => ({
@@ -340,6 +379,8 @@ export function ChatWindowsProvider({
       uid?: string;
       text?: string;
       createdAt?: number;
+      sourceType?: ServerApi.ChatRoutes.AllRoomEventSourceType;
+      sourceId?: string;
     };
     const uid = String(payload.uid || "");
     if (!uid) return;
@@ -350,6 +391,8 @@ export function ChatWindowsProvider({
         uid,
         text: String(payload.text || ""),
         createdAt: Number(payload.createdAt || Date.now()),
+        ...(payload.sourceType ? { sourceType: payload.sourceType } : {}),
+        ...(payload.sourceId ? { sourceId: String(payload.sourceId) } : {}),
       },
     ]);
     clearTypingUser("__all", uid);

@@ -115,7 +115,7 @@ public/imgs/tiles/{zoom}/{column}/{row}.png
 
 Current map constants are fixed in the client for zoom levels `1..6` and `512px` square tiles. The existing PWA asset precache includes these PNG tiles in production builds, and the custom service worker also applies cache-first runtime caching for images and tile assets with a large one-year cache.
 
-The map also loads adventure-scoped persistent markers through `/ynev/markers/get` with the active `advId`. `Self` creates private markers for the current adventure, `All` creates shared markers for the current adventure, and placement opens a color/comment dialog before saving. Saved markers use the selected color as the pin fill and show the creator in the popup. Search results use a temporary red marker unless saved through one of those buttons.
+The map also loads adventure-scoped persistent markers through `/ynev/markers/get` with the active `advId`. `Self` creates private markers for the current adventure, `All` creates shared markers for the current adventure, and placement opens a color/comment dialog before saving. Admins and superadmins also get a `Hidden` placement button for hidden shared markers: hidden markers are visible only to admins until they are revealed from the marker popup. Saved markers use the selected color as the pin fill and show the creator in the popup. Search results use a temporary red marker unless saved through one of those buttons. All-marker chat event coordinates are clickable and open the YNEV map centered on that source coordinate.
 
 Admins and superadmins also get a `Cities` toggle. It renders linked city-map points from `public/data/ynev_locations.json` rows that include a `url`, opening a small map bubble with a `térkép` link.
 
@@ -167,7 +167,7 @@ Frontend request hook uses controller paths from shared contract types:
 - `/chat`
 - `/ynev`
 
-Chat typing indicators use `POST /chat/typing` with client-side throttling and the transient `chat:typing` SSE event. Indicators expire locally if no fresh typing ping arrives.
+Chat typing indicators use `POST /chat/typing` with client-side throttling and the transient `chat:typing` SSE event. Indicators expire locally if no fresh typing ping arrives. All-room event rows may carry optional `sourceType` and `sourceId` metadata; YNEV marker event coordinates are rendered as map-jump links.
 
 Telemetry:
 
@@ -176,8 +176,8 @@ Telemetry:
 
 Role UX:
 
-- `Admin` toolbar action is visible for `ADMIN` and `SUPERADMIN`.
-- `Test` toolbar action is visible only for `SUPERADMIN`.
+- `Admin` launcher window is visible for `ADMIN` and `SUPERADMIN`.
+- `Dev` launcher window is visible only for `SUPERADMIN`.
 
 Adventure shared notes window:
 
@@ -269,6 +269,7 @@ Adventure admin character views:
 - `character:updated` SSE now refreshes both the 4x2 admin grid identity entry and any already-open admin character detail window for that character.
 - Admin character detail Basic Data includes a level-gated specialization select for level 10+ characters, using the selected class `specs` and guarded character updates.
 - Player spell panels show common spells plus spells matching `character.rp.specialization`; other specialization branches are hidden.
+- Secondary skill lists use Hungarian collation and show a red `!` beside skills that have an admin note; hovering the marker shows the note text.
 - Admin adventure/item aura editing uses the same structured aura editor UI as the player character page, including per-item additional aura editing.
 - Aura display is centralized through `AuraDisplay`, so character, admin, item-hover, and per-instance item aura summaries show the same compact effect/apply-mode/modifier/description details.
 - Item aura editing can mark item auras as equipped-only or carried-or-equipped; carried item auras display and apply from inventory.
@@ -284,6 +285,8 @@ Window launcher behavior:
 - The right-side chat/presence launcher stack starts from the top of the screen.
 - The chat/presence launcher lists all users except the current user; offline users are red, inactive online users are yellow, and active online users are green.
 - Page/admin/general launcher groups are anchored from the bottom of the screen.
+- Open launcher windows can be minimized from the window header.
+- Clicking an already-open launcher window icon minimizes that window.
 - Launcher dividers render only between non-empty groups.
 - Non-built-in windows can be pinned/unpinned from the launcher with right click.
 - User-pinned launcher windows persist descriptor-safe records in browser `localStorage`.
@@ -320,6 +323,9 @@ Client-side UI is split into isolated domains to prevent unrelated SSE/activity 
   - supports page-scoped windows via `allowedPages` and `keepStateAcrossPages`
 - `PageFlowProvider` (`src/contexts/pageFlowContext.tsx`)
   - page state, return page, transition state
+- `ErrorProvider` and `PopupProvider` (`src/hooks/error.tsx`, `src/hooks/popup.tsx`)
+  - provider-backed JSX modal rendering for blocking errors and popup prompts
+  - preserves the existing `useError` and `usePopup` hook APIs without imperative modal DOM construction
 
 Render-safety rules used in this client:
 

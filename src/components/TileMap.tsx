@@ -40,6 +40,7 @@ type TYnevMarkerKind = "search" | ServerApi.YnevRoutes.MarkerScope;
 type TPendingMarker = {
   scope: ServerApi.YnevRoutes.MarkerScope;
   latLng: L.LatLng;
+  hidden?: boolean;
 };
 
 const MARKER_STYLE: Record<TYnevMarkerKind, L.CircleMarkerOptions> = {
@@ -110,7 +111,13 @@ class YnevTileLayer extends L.TileLayer {
   }
 }
 
-export default function TileMap(props: { resizeKey?: number; advId?: string }) {
+export default function TileMap(props: {
+  resizeKey?: number;
+  advId?: string;
+  jumpX?: string;
+  jumpY?: string;
+  jumpNonce?: string;
+}) {
   const { user } = useDataContext();
   const [ynevRequest] = useRequest(Application.REQUEST_CONTROLLER.YNEV);
   const advId = String(props.advId || "").trim();
@@ -121,6 +128,7 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
   const [locations, setLocations] = useState<TYnevLocation[]>([]);
   const [markers, setMarkers] = useState<ServerApi.YnevRoutes.Marker[]>([]);
   const [armedScope, setArmedScope] = useState<ServerApi.YnevRoutes.MarkerScope | null>(null);
+  const [armedHidden, setArmedHidden] = useState(false);
   const [pendingMarker, setPendingMarker] = useState<TPendingMarker | null>(null);
   const [markerColor, setMarkerColor] = useState("#3b82f6");
   const [markerComment, setMarkerComment] = useState("");
@@ -169,7 +177,9 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
     onDelete?: () => void,
     color?: string,
     comment?: string,
-    creatorName?: string
+    creatorName?: string,
+    hidden?: boolean,
+    onReveal?: () => void
   ) => {
     const marker = L.marker(sourceToLatLng(x, y), {
       icon: createPinMarkerIcon(color || MARKER_STYLE[kind].color || "#3b82f6"),
@@ -184,7 +194,7 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
       const titleText = kind === "all" ? "K\u00f6z\u00f6s" : "";
       if (titleText) {
         const title = L.DomUtil.create("div", "", popup);
-        title.textContent = titleText;
+        title.textContent = hidden ? `${titleText} (hidden)` : titleText;
         title.style.color = "#000000";
         title.style.fontWeight = "700";
       }
@@ -220,6 +230,20 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
         L.DomEvent.on(button, "click", L.DomEvent.stopPropagation)
           .on(button, "click", L.DomEvent.preventDefault)
           .on(button, "click", onDelete);
+      }
+      if (hidden && onReveal) {
+        const reveal = L.DomUtil.create("button", "", popup);
+        reveal.type = "button";
+        reveal.textContent = "Set visible";
+        reveal.style.display = "block";
+        reveal.style.marginTop = "8px";
+        reveal.style.color = "#000000";
+        reveal.style.border = "1px solid #000000";
+        reveal.style.padding = "2px 6px";
+        reveal.style.cursor = "pointer";
+        L.DomEvent.on(reveal, "click", L.DomEvent.stopPropagation)
+          .on(reveal, "click", L.DomEvent.preventDefault)
+          .on(reveal, "click", onReveal);
       }
       marker.bindPopup(popup);
     } else {
@@ -290,11 +314,27 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
     }
   }, [loadMarkers]);
 
+  const revealMarker = useCallback(async (id: string) => {
+    try {
+      const response = await ynevRequestRef.current<ServerApi.YnevRoutes.RevealMarkerResponse, ServerApi.YnevRoutes.RevealMarkerBody>({
+        endPoint: "markers/reveal",
+        body: { id },
+        errorMode: "quiet",
+      });
+      setMarkers((current) =>
+        current.map((marker) => (marker.id === id ? response.data.marker : marker))
+      );
+    } catch {
+      void loadMarkers();
+    }
+  }, [loadMarkers]);
+
   const saveMarker = useCallback(async (
     scope: ServerApi.YnevRoutes.MarkerScope,
     latLng: L.LatLng,
     color: string,
-    comment: string
+    comment: string,
+    hidden = false
   ) => {
     if (!advId) return;
     const source = latLngToSource(latLng);
@@ -309,6 +349,7 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
         label,
         color,
         comment,
+        hidden,
       },
       errorMode: "quiet",
     });
@@ -426,17 +467,19 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
     const handleClick = (event: L.LeafletMouseEvent) => {
       if (!armedScope) return;
       const scope = armedScope;
+      const hidden = armedHidden && scope === "all";
       setArmedScope(null);
+      setArmedHidden(false);
       if (!advId) return;
       setMarkerColor(scope === "all" ? "#22c55e" : "#3b82f6");
       setMarkerComment("");
-      setPendingMarker({ scope, latLng: event.latlng });
+      setPendingMarker({ scope, latLng: event.latlng, hidden });
     };
     map.on("click", handleClick);
     return () => {
       map.off("click", handleClick);
     };
-  }, [advId, armedScope, loadMarkers, saveMarker]);
+  }, [advId, armedHidden, armedScope, loadMarkers, saveMarker]);
 
   useEffect(() => {
     const layer = markerLayerRef.current;
@@ -452,10 +495,12 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
         canDelete ? () => void deleteMarker(marker.id) : undefined,
         marker.color,
         marker.comment,
-        marker.creatorName
+        marker.creatorName,
+        Boolean(marker.hidden),
+        Boolean(marker.hidden) && canAdminMarkers ? () => void revealMarker(marker.id) : undefined
       ).addTo(layer);
     });
-  }, [canAdminMarkers, createMapMarker, deleteMarker, markers, user?.uid]);
+  }, [canAdminMarkers, createMapMarker, deleteMarker, markers, revealMarker, user?.uid]);
 
   useEffect(() => {
     const layer = cityLayerRef.current;
@@ -587,11 +632,35 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
     highlightRef.current.openPopup();
   };
 
+  useEffect(() => {
+    const x = Number(props.jumpX);
+    const y = Number(props.jumpY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const jump = () => {
+      const map = mapRef.current;
+      if (!map) return false;
+      const target = sourceToLatLng(x, y);
+      map.setView(target, LEAFLET_MAX_ZOOM);
+      highlightRef.current?.remove();
+      highlightRef.current = createMapMarker(
+        "search",
+        x,
+        y,
+        `x:${Math.round(x)}, y:${Math.round(y)}`
+      ).addTo(map);
+      highlightRef.current.openPopup();
+      return true;
+    };
+    if (jump()) return;
+    const frame = window.requestAnimationFrame(jump);
+    return () => window.cancelAnimationFrame(frame);
+  }, [createMapMarker, props.jumpNonce, props.jumpX, props.jumpY, sourceToLatLng]);
+
   const submitPendingMarker = () => {
     if (!pendingMarker) return;
     const next = pendingMarker;
     setPendingMarker(null);
-    void saveMarker(next.scope, next.latLng, markerColor, markerComment).catch(() => {
+    void saveMarker(next.scope, next.latLng, markerColor, markerComment, next.hidden === true).catch(() => {
       void loadMarkers();
     });
   };
@@ -653,6 +722,7 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
           className={`px-2 py-1 rounded text-white ${armedScope === "self" ? "bg-blue-700" : "bg-blue-500"}`}
           onClick={() => {
             if (!advId) return;
+            setArmedHidden(false);
             setArmedScope((current) => current === "self" ? null : "self");
           }}
         >
@@ -664,11 +734,26 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
           className={`px-2 py-1 rounded text-white ${armedScope === "all" ? "bg-green-700" : "bg-green-500"}`}
           onClick={() => {
             if (!advId) return;
+            setArmedHidden(false);
             setArmedScope((current) => current === "all" ? null : "all");
           }}
         >
           All
         </button>
+        {canAdminMarkers ? (
+          <button
+            type="button"
+            disabled={!advId}
+            className={`px-2 py-1 rounded text-white ${armedScope === "all" && armedHidden ? "bg-zinc-800" : "bg-zinc-600"}`}
+            onClick={() => {
+              if (!advId) return;
+              setArmedHidden(true);
+              setArmedScope((current) => current === "all" && armedHidden ? null : "all");
+            }}
+          >
+            Hidden
+          </button>
+        ) : null}
         {canAdminMarkers ? (
           <button
             type="button"
@@ -690,7 +775,7 @@ export default function TileMap(props: { resizeKey?: number; advId?: string }) {
           onTouchStart={(event) => event.stopPropagation()}
         >
           <div className="mb-2 font-bold">
-            {pendingMarker.scope === "all" ? "K\u00f6z\u00f6s" : "Self marker"}
+            {pendingMarker.hidden ? "Hidden K\u00f6z\u00f6s" : pendingMarker.scope === "all" ? "K\u00f6z\u00f6s" : "Self marker"}
           </div>
           <div className="mb-2 flex flex-wrap gap-1">
             {["#3b82f6", "#22c55e", "#ef4444", "#f59e0b", "#a855f7", "#111827"].map((color) => (

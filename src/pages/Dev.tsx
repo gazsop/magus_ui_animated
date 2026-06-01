@@ -230,6 +230,7 @@ export default function Dev() {
       lvlReq: Math.max(0, Math.floor(Number(raw.lvlReq || 0))),
       skillLevel,
       skill: Math.max(0, Math.floor(Number(raw.skill || 0))),
+      note: String(raw.note || ""),
     };
   };
 

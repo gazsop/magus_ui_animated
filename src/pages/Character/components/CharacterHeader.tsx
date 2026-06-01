@@ -264,7 +264,7 @@ function HeaderStatGrid({
     <FlexRow
       className={`${
         className ? className + " " : ""
-      } fancy-container w-full h-full min-w-0 min-h-0 overflow-hidden flex flex-wrap gap-0.5 justify-around items-center`}
+      } fancy-container w-full h-full min-w-0 min-h-0 overflow-hidden flex flex-wrap gap-0.5 justify-around items-center cursor-pointer select-none`}
       onClick={onToggleLabels}
     >
       {items.map((item) => (

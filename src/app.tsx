@@ -619,13 +619,6 @@ function UIElement(props: {
       setChatPolicyHash(String((payload as { hash?: string }).hash || ""));
     }
   );
-  const openOverlayPage = useCallback((target: PageState) => {
-    if (pSt !== PageState.ADMIN && pSt !== PageState.DEV) {
-      setReturnPage(pSt);
-    }
-    setPst(target);
-  }, [pSt, setPst, setReturnPage]);
-
   const pinnedWindows: IWindowsLayerWindowProps[] = useMemo(() => [
     {
       name: "AI Chat",
@@ -672,7 +665,43 @@ function UIElement(props: {
         launcherGroup: "general",
       },
     },
-  ], [activeAdventureId]);
+    ...(isAdmin
+      ? [
+          {
+            name: "Admin",
+            icon: <SettingsIcon className="w-4 h-4" />,
+            descriptor: {
+              id: "Admin",
+              kind: "admin-page",
+              title: "Admin",
+              icon: "AD",
+              defaultOpen: false,
+              allowedPages: LOGGED_IN_PAGES,
+              keepStateAcrossPages: true,
+              launcherGroup: "admin" as const,
+            },
+          },
+        ]
+      : []),
+    ...(isSuperAdmin
+      ? [
+          {
+            name: "Dev",
+            icon: <>DV</>,
+            descriptor: {
+              id: "Dev",
+              kind: "dev-page",
+              title: "Dev",
+              icon: "DV",
+              defaultOpen: false,
+              allowedPages: LOGGED_IN_PAGES,
+              keepStateAcrossPages: true,
+              launcherGroup: "admin" as const,
+            },
+          },
+        ]
+      : []),
+  ], [activeAdventureId, isAdmin, isSuperAdmin]);
 
   useEffect(() => {
     if (!isLoggedIn || !activeAdventureId) {
@@ -824,15 +853,7 @@ function UIElement(props: {
           },
         ]
       : []),
-    ...(isAdmin
-      ? [
-          { name: "Admin", icon: <SettingsIcon className="w-4 h-4" />, launcherGroup: "admin" as const, onClick: () => openOverlayPage(PageState.ADMIN) },
-        ]
-      : []),
-    ...(isSuperAdmin
-      ? [{ name: "Dev", icon: <>DV</>, launcherGroup: "admin" as const, onClick: () => openOverlayPage(PageState.DEV) }]
-      : []),
-  ], [isLoggedIn, pushPermission, requestPushPermission, activeAdventureId, chatPolicy.allowUserDirect, chatPolicy.allowUserAllRoom, mutedChatLauncherStyle, pSt, isAdmin, isSuperAdmin, combatBadge.enabled, combatBadge.turn, isCharacterLayoutEdit, openOverlayPage]);
+  ], [isLoggedIn, pushPermission, requestPushPermission, activeAdventureId, chatPolicy.allowUserDirect, chatPolicy.allowUserAllRoom, mutedChatLauncherStyle, pSt, isAdmin, combatBadge.enabled, combatBadge.turn, isCharacterLayoutEdit]);
   const showWindowSystem = pSt !== PageState.LOGIN;
   const onlineUserBadges = useMemo(() => {
     const baseByUid = new Map<string, IOnlineUserBadge>();
@@ -1118,13 +1139,13 @@ function YnevWindowBridge({
 }: {
   activeAdventureId: string;
 }) {
-  const { updateWindow } = useWindowRegistry();
+  const { registerWindow, updateWindow } = useWindowRegistry();
 
   useEffect(() => {
-    updateWindow("YNEV", {
+    const buildYnevWindow = (jump?: { x: number; y: number; nonce: string }): IWindowsLayerWindowProps => ({
       name: "YNEV",
       icon: <GlobeIcon className="w-4 h-4" />,
-      defaultOpen: false,
+      defaultOpen: Boolean(jump),
       persistentLauncher: true,
       allowedPages: LOGGED_IN_PAGES,
       keepStateAcrossPages: true,
@@ -1136,15 +1157,40 @@ function YnevWindowBridge({
         icon: "YN",
         params: {
           advId: activeAdventureId,
+          ...(jump
+            ? {
+                jumpX: String(jump.x),
+                jumpY: String(jump.y),
+                jumpNonce: jump.nonce,
+              }
+            : {}),
         },
-        defaultOpen: false,
+        defaultOpen: Boolean(jump),
         persistentLauncher: true,
         allowedPages: LOGGED_IN_PAGES,
         keepStateAcrossPages: true,
         launcherGroup: "general",
       },
     });
-  }, [activeAdventureId, updateWindow]);
+    updateWindow("YNEV", buildYnevWindow());
+    const handleJump = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      const x = Number(detail.x);
+      const y = Number(detail.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      const advId = String(detail.advId || activeAdventureId);
+      if (advId && activeAdventureId && advId !== activeAdventureId) return;
+      registerWindow(
+        buildYnevWindow({
+          x,
+          y,
+          nonce: String(detail.nonce || Date.now()),
+        })
+      );
+    };
+    window.addEventListener("ynev:jump", handleJump);
+    return () => window.removeEventListener("ynev:jump", handleJump);
+  }, [activeAdventureId, registerWindow, updateWindow]);
 
   return null;
 }

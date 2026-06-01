@@ -5,6 +5,7 @@ export type TWindowLauncherGroup = "general" | "admin" | "page" | "chat";
 
 export type TWindowRenderProps = {
   close: () => void;
+  minimize: () => void;
   selectWindow: () => void;
   classes?: string;
 };

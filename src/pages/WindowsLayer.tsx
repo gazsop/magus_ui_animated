@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, JSX, memo, useMemo, useCallback, useEffect } from "preact/compat";
 import { FlexCol, FlexRow } from "@components/Flex";
+import { RndWindowControlsContext } from "@components/RndContainer";
 import { PageState } from "@/app/navigation";
 import { renderWindowDescriptor } from "@/windows/windowDescriptorRenderers";
 import {
@@ -249,20 +250,28 @@ const WindowsCanvas = memo(function WindowsCanvas(props: {
   windows: TWindowState[];
   selectedWindow: string;
   removeWindow: (name: string) => void;
+  minimizeWindow: (name: string) => void;
   setSelectedWindow: (name: string) => void;
 }) {
-  const { windows, selectedWindow, removeWindow, setSelectedWindow } = props;
+  const { windows, selectedWindow, removeWindow, minimizeWindow, setSelectedWindow } = props;
   return (
     <>
       {windows.map((windowElem) => {
         if (!windowElem || !windowElem.isOpen) return null;
         return (
           <div key={windowElem.name}>
-            {renderWindowDescriptor(windowElem.descriptor, {
-              close: () => removeWindow(windowElem.name),
-              selectWindow: () => setSelectedWindow(windowElem.name),
-              classes: selectedWindow === windowElem.name ? "z-50" : "z-10",
-            })}
+            <RndWindowControlsContext.Provider
+              value={{
+                minimize: () => minimizeWindow(windowElem.name),
+              }}
+            >
+              {renderWindowDescriptor(windowElem.descriptor, {
+                close: () => removeWindow(windowElem.name),
+                minimize: () => minimizeWindow(windowElem.name),
+                selectWindow: () => setSelectedWindow(windowElem.name),
+                classes: selectedWindow === windowElem.name ? "z-50" : "z-10",
+              })}
+            </RndWindowControlsContext.Provider>
           </div>
         );
       })}
@@ -376,8 +385,12 @@ const LauncherBar = memo(function LauncherBar(props: {
                   className="fancy-container h-[35px] m-0.5 cursor-pointer items-center pl-2 relative"
                   style={{ borderRadius: "17px 0px 0px 17px" }}
                   onClick={() => {
+                    if (windowElem.isOpen) {
+                      props.setSelectedWindow("");
+                      props.toggleWindow(windowElem.name);
+                      return;
+                    }
                     props.setSelectedWindow(windowElem.name);
-                    if (windowElem.isOpen) return;
                     props.openWindow(windowElem.name);
                   }}
                   onContextMenu={(e) => {
@@ -559,6 +572,19 @@ export const WindowsLayerProvider = (props: {
     });
   }, []);
 
+  const minimizeWindow = useCallback((name: string) => {
+    setWindows((prev) => {
+      const idx = prev.findIndex((windowState) => windowState.name === name);
+      if (idx < 0) return prev;
+      const current = prev[idx];
+      if (!current.isOpen) return prev;
+      const next = [...prev];
+      next[idx] = { ...current, isOpen: false };
+      return next;
+    });
+    setSelectedWindow((prev) => (prev === name ? "" : prev));
+  }, []);
+
   const toggleWindow = useCallback((name: string) => {
     setWindows((prev) => {
       const idx = prev.findIndex((windowState) => windowState.name === name);
@@ -652,6 +678,7 @@ export const WindowsLayerProvider = (props: {
         windows={visibleWindows}
         selectedWindow={selectedWindow}
         removeWindow={removeWindow}
+        minimizeWindow={minimizeWindow}
         setSelectedWindow={setSelectedWindow}
       />
       <FlexCol

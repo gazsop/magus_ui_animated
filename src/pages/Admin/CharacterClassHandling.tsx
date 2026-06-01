@@ -260,6 +260,7 @@ const ClassHandlingWindow = ({
               savedStat?.skillLevel || Character.SECONDARY_STAT_LEVEL.BASIC,
             skill: savedStat?.skill || 0,
             lvlReq: savedStat?.lvlReq || 0,
+            note: savedStat?.note || "",
           };
         }),
       [selectedClass.modifiers.secondaryStats]

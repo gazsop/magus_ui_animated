@@ -18,6 +18,7 @@ const EMPTY_SECONDARY_STAT: Character.TSecondaryStat = {
   skillLevel: Character.SECONDARY_STAT_LEVEL.BASIC,
   skill: 0,
   lvlReq: 0,
+  note: "",
 };
 
 export default function SecondaryStatListEditor({
@@ -125,6 +126,18 @@ export default function SecondaryStatListEditor({
           }}
           widthOverride="w-16 shrink-0"
         />
+        <InputUnq
+          id={`${idPrefix}-note`}
+          label="note"
+          value={selectedStat.note || ""}
+          onBlur={(e) => {
+            setSelectedStat((prev) => ({
+              ...prev,
+              note: e.currentTarget.value,
+            }));
+          }}
+          widthOverride="w-48 shrink-0"
+        />
         <ButtonUnq id={`${idPrefix}-add`} onClick={addStat} className="shrink-0">
           Add
         </ButtonUnq>
@@ -197,6 +210,18 @@ export default function SecondaryStatListEditor({
                 });
               }}
               widthOverride="w-16 shrink-0"
+              className="shrink-0"
+            />
+            <InputUnq
+              id={`${idPrefix}-item-note-${index}`}
+              label="note"
+              value={stat.note || ""}
+              onBlur={(e) => {
+                updateStat(index, {
+                  note: e.currentTarget.value,
+                });
+              }}
+              widthOverride="w-48 shrink-0"
               className="shrink-0"
             />
             <ButtonUnq

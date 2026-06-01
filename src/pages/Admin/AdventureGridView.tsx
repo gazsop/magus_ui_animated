@@ -191,9 +191,11 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
   const [statEditValueRaw, setStatEditValueRaw] = useState("");
   const [statEditError, setStatEditError] = useState("");
   const [statEditBusy, setStatEditBusy] = useState(false);
+  const [userNamesByUid, setUserNamesByUid] = useState<Record<string, string>>({});
   const [requestCharacters] = useRequest(Application.REQUEST_CONTROLLER.CHARACTERS);
   const [requestAdventure] = useRequest(Application.REQUEST_CONTROLLER.ADVENTURES);
   const [requestRest] = useRequest(Application.REQUEST_CONTROLLER.REST);
+  const [requestUsers] = useRequest(Application.REQUEST_CONTROLLER.USERS);
   const { setError } = useError();
   const canUseDom = typeof document !== "undefined";
 
@@ -473,6 +475,19 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
   }, [itemSearch, allItems, isAddItemModalOpen]);
 
   useEffect(() => {
+    requestUsers<Array<{ uid: string; name: string }>>({
+      endPoint: "/getAll",
+      errorMode: "quiet",
+    })
+      .then((response) => {
+        const next: Record<string, string> = {};
+        (response.data || []).forEach((user) => {
+          if (!user?.uid) return;
+          next[user.uid] = user.name || user.uid;
+        });
+        setUserNamesByUid(next);
+      })
+      .catch(() => setUserNamesByUid({}));
     requestRest<{ entries: TNamedValue[] }>({ endPoint: "getAllReligions", errorMode: "quiet" })
       .then((response) => setReligions(response.data?.entries || []))
       .catch(() => setReligions([]));
@@ -763,7 +778,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
     }) => (
       <button
         type="button"
-        className={`text-left underline decoration-dotted underline-offset-2 hover:text-blue-800 ${className}`}
+        className={`text-left underline decoration-dotted underline-offset-2 hover:text-blue-800 cursor-pointer select-none ${className}`}
         onClick={() => {
           if (!c) return;
           openStatEditor({
@@ -1637,6 +1652,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
           >
             <div className="flex flex-col gap-1">
               <p className="font-semibold truncate">{entry.name}</p>
+              <p className="text-xs opacity-70 truncate">{userNamesByUid[entry.id] || entry.id}</p>
               <p>Race: {entry.race}</p>
               <p>Class: {entry.className}</p>
               <p>Level: {entry.level}</p>

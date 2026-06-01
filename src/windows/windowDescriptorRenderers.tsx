@@ -8,7 +8,9 @@ import { AdminAdventureCharacterDataDescriptorWindow } from "@contexts/adminAdve
 import useError from "@hooks/error";
 import useRequest from "@hooks/request";
 import AIChat from "@pages/AIChat";
+import Admin from "@pages/Admin/Admin";
 import CharacterPage from "@pages/Character/Character";
+import Dev from "@pages/Dev";
 import SharedAdventureNotes from "@pages/SharedAdventureNotes";
 import Wiki from "@pages/Wiki";
 import { Application } from "@shared/contracts";
@@ -56,6 +58,7 @@ registerWindowDescriptorRenderer("wiki", (descriptor, props) => (
     id={descriptor.id}
     aditionalIcons={null}
     close={props.close}
+    minimize={props.minimize}
     label={descriptor.title}
     className={props.classes}
   >
@@ -68,6 +71,7 @@ registerWindowDescriptorRenderer("external-frame", (descriptor, props) => (
     id={descriptor.id}
     aditionalIcons={null}
     close={props.close}
+    minimize={props.minimize}
     label={descriptor.title}
     className={props.classes}
   >
@@ -82,10 +86,12 @@ registerWindowDescriptorRenderer("external-frame", (descriptor, props) => (
 const TileMapDescriptorWindow = ({
   descriptor,
   close,
+  minimize,
   classes,
 }: {
   descriptor: TWindowDescriptor;
   close: () => void;
+  minimize: () => void;
   classes?: string;
 }) => {
   const [resizeKey, setResizeKey] = useState(0);
@@ -97,11 +103,18 @@ const TileMapDescriptorWindow = ({
       id={descriptor.id}
       aditionalIcons={null}
       close={close}
+      minimize={minimize}
       label={descriptor.title}
       className={classes}
       onSizeChange={handleSizeChange}
     >
-      <TileMap resizeKey={resizeKey} advId={descriptor.params?.advId || ""} />
+      <TileMap
+        resizeKey={resizeKey}
+        advId={descriptor.params?.advId || ""}
+        jumpX={descriptor.params?.jumpX}
+        jumpY={descriptor.params?.jumpY}
+        jumpNonce={descriptor.params?.jumpNonce}
+      />
     </RndContainer>
   );
 };
@@ -110,6 +123,7 @@ registerWindowDescriptorRenderer("tile-map", (descriptor, props) => (
   <TileMapDescriptorWindow
     descriptor={descriptor}
     close={props.close}
+    minimize={props.minimize}
     classes={props.classes}
   />
 ));
@@ -118,6 +132,7 @@ registerWindowDescriptorRenderer("shared-notes", (descriptor, props) => (
   <RndContainer
     id={descriptor.id}
     close={props.close}
+    minimize={props.minimize}
     label={descriptor.title}
     className={props.classes}
     aditionalIcons={null}
@@ -130,6 +145,7 @@ registerWindowDescriptorRenderer("private-notes", (descriptor, props) => (
   <RndContainer
     id={descriptor.id}
     close={props.close}
+    minimize={props.minimize}
     label={descriptor.title}
     className={props.classes}
     aditionalIcons={null}
@@ -145,6 +161,32 @@ registerWindowDescriptorRenderer("chat", (descriptor, props) => (
     close={props.close}
     classes={props.classes}
   />
+));
+
+registerWindowDescriptorRenderer("admin-page", (descriptor, props) => (
+  <RndContainer
+    id={descriptor.id}
+    aditionalIcons={null}
+    close={props.close}
+    minimize={props.minimize}
+    label={descriptor.title}
+    className={props.classes}
+  >
+    <Admin />
+  </RndContainer>
+));
+
+registerWindowDescriptorRenderer("dev-page", (descriptor, props) => (
+  <RndContainer
+    id={descriptor.id}
+    aditionalIcons={null}
+    close={props.close}
+    minimize={props.minimize}
+    label={descriptor.title}
+    className={props.classes}
+  >
+    <Dev />
+  </RndContainer>
 ));
 
 const AdminRestDescriptorWindow = ({
@@ -189,6 +231,7 @@ registerWindowDescriptorRenderer("admin-character-viewer", (descriptor, props) =
     id={`char_${descriptor.params?.advId || "0"}_${descriptor.params?.uid || "unknown"}`}
     aditionalIcons={<>AI</>}
     close={props.close}
+    minimize={props.minimize}
     label={descriptor.title}
     className={props.classes}
   >
@@ -232,6 +275,7 @@ export const renderWindowDescriptor = (
       id={descriptor.id}
       aditionalIcons={null}
       close={props.close}
+      minimize={props.minimize}
       label={descriptor.title}
       className={props.classes}
     >
