@@ -123,13 +123,14 @@ export default function TileMap(props: {
   const advId = String(props.advId || "").trim();
   const isSuperAdmin = user?.json?.rank === User.USER_RANK.SUPERADMIN;
   const canAdminMarkers =
+    user?.json?.isAdmin === true ||
     user?.json?.rank === User.USER_RANK.ADMIN ||
     user?.json?.rank === User.USER_RANK.SUPERADMIN;
   const [locations, setLocations] = useState<TYnevLocation[]>([]);
   const [markers, setMarkers] = useState<ServerApi.YnevRoutes.Marker[]>([]);
   const [armedScope, setArmedScope] = useState<ServerApi.YnevRoutes.MarkerScope | null>(null);
-  const [armedHidden, setArmedHidden] = useState(false);
   const [pendingMarker, setPendingMarker] = useState<TPendingMarker | null>(null);
+  const [markerStatus, setMarkerStatus] = useState("");
   const [markerColor, setMarkerColor] = useState("#3b82f6");
   const [markerComment, setMarkerComment] = useState("");
   const [showCities, setShowCities] = useState(false);
@@ -290,32 +291,39 @@ export default function TileMap(props: {
       return;
     }
     try {
+      setMarkerStatus((current) => current || "Loading markers...");
       const response = await ynevRequestRef.current<ServerApi.YnevRoutes.GetMarkersResponse, ServerApi.YnevRoutes.GetMarkersBody>({
         endPoint: "markers/get",
         body: { advId },
         errorMode: "quiet",
       });
       setMarkers(Array.isArray(response.data.markers) ? response.data.markers : []);
+      setMarkerStatus((current) => current === "Loading markers..." ? "" : current);
     } catch {
       setMarkers([]);
+      setMarkerStatus("Marker load failed.");
     }
   }, [advId, user?.uid]);
 
   const deleteMarker = useCallback(async (id: string) => {
     try {
+      setMarkerStatus("Deleting marker...");
       await ynevRequestRef.current<ServerApi.YnevRoutes.DeleteMarkerResponse, ServerApi.YnevRoutes.DeleteMarkerBody>({
         endPoint: "markers/delete",
         body: { id },
         errorMode: "quiet",
       });
       setMarkers((current) => current.filter((marker) => marker.id !== id));
+      setMarkerStatus("Marker deleted.");
     } catch {
+      setMarkerStatus("Marker delete failed.");
       void loadMarkers();
     }
   }, [loadMarkers]);
 
   const revealMarker = useCallback(async (id: string) => {
     try {
+      setMarkerStatus("Revealing marker...");
       const response = await ynevRequestRef.current<ServerApi.YnevRoutes.RevealMarkerResponse, ServerApi.YnevRoutes.RevealMarkerBody>({
         endPoint: "markers/reveal",
         body: { id },
@@ -324,7 +332,9 @@ export default function TileMap(props: {
       setMarkers((current) =>
         current.map((marker) => (marker.id === id ? response.data.marker : marker))
       );
+      setMarkerStatus("Marker is visible.");
     } catch {
+      setMarkerStatus("Marker reveal failed.");
       void loadMarkers();
     }
   }, [loadMarkers]);
@@ -336,9 +346,13 @@ export default function TileMap(props: {
     comment: string,
     hidden = false
   ) => {
-    if (!advId) return;
+    if (!advId) {
+      setMarkerStatus("Select an adventure before placing YNEV markers.");
+      return;
+    }
     const source = latLngToSource(latLng);
     const label = scope === "all" ? "K\u00f6z\u00f6s" : "";
+    setMarkerStatus("Saving marker...");
     const response = await ynevRequestRef.current<ServerApi.YnevRoutes.Marker, ServerApi.YnevRoutes.CreateMarkerBody>({
       endPoint: "markers/create",
       body: {
@@ -354,6 +368,7 @@ export default function TileMap(props: {
       errorMode: "quiet",
     });
     setMarkers((current) => [...current, response.data]);
+    setMarkerStatus("Marker saved.");
   }, [advId, latLngToSource]);
 
   useEffect(() => {
@@ -467,19 +482,21 @@ export default function TileMap(props: {
     const handleClick = (event: L.LeafletMouseEvent) => {
       if (!armedScope) return;
       const scope = armedScope;
-      const hidden = armedHidden && scope === "all";
       setArmedScope(null);
-      setArmedHidden(false);
-      if (!advId) return;
+      if (!advId) {
+        setMarkerStatus("Select an adventure before placing YNEV markers.");
+        return;
+      }
       setMarkerColor(scope === "all" ? "#22c55e" : "#3b82f6");
       setMarkerComment("");
-      setPendingMarker({ scope, latLng: event.latlng, hidden });
+      setPendingMarker({ scope, latLng: event.latlng, hidden: false });
+      setMarkerStatus("Marker position accepted. Add details and save.");
     };
     map.on("click", handleClick);
     return () => {
       map.off("click", handleClick);
     };
-  }, [advId, armedHidden, armedScope, loadMarkers, saveMarker]);
+  }, [advId, armedScope, loadMarkers, saveMarker]);
 
   useEffect(() => {
     const layer = markerLayerRef.current;
@@ -641,14 +658,6 @@ export default function TileMap(props: {
       if (!map) return false;
       const target = sourceToLatLng(x, y);
       map.setView(target, LEAFLET_MAX_ZOOM);
-      highlightRef.current?.remove();
-      highlightRef.current = createMapMarker(
-        "search",
-        x,
-        y,
-        `x:${Math.round(x)}, y:${Math.round(y)}`
-      ).addTo(map);
-      highlightRef.current.openPopup();
       return true;
     };
     if (jump()) return;
@@ -661,6 +670,7 @@ export default function TileMap(props: {
     const next = pendingMarker;
     setPendingMarker(null);
     void saveMarker(next.scope, next.latLng, markerColor, markerComment, next.hidden === true).catch(() => {
+      setMarkerStatus("Marker save failed.");
       void loadMarkers();
     });
   };
@@ -721,9 +731,15 @@ export default function TileMap(props: {
           disabled={!advId}
           className={`px-2 py-1 rounded text-white ${armedScope === "self" ? "bg-blue-700" : "bg-blue-500"}`}
           onClick={() => {
-            if (!advId) return;
-            setArmedHidden(false);
-            setArmedScope((current) => current === "self" ? null : "self");
+            if (!advId) {
+              setMarkerStatus("Select an adventure before placing YNEV markers.");
+              return;
+            }
+            setArmedScope((current) => {
+              const next = current === "self" ? null : "self";
+              setMarkerStatus(next ? "Self marker armed. Click the map." : "Marker placement cancelled.");
+              return next;
+            });
           }}
         >
           Self
@@ -733,27 +749,19 @@ export default function TileMap(props: {
           disabled={!advId}
           className={`px-2 py-1 rounded text-white ${armedScope === "all" ? "bg-green-700" : "bg-green-500"}`}
           onClick={() => {
-            if (!advId) return;
-            setArmedHidden(false);
-            setArmedScope((current) => current === "all" ? null : "all");
+            if (!advId) {
+              setMarkerStatus("Select an adventure before placing YNEV markers.");
+              return;
+            }
+            setArmedScope((current) => {
+              const next = current === "all" ? null : "all";
+              setMarkerStatus(next ? "Shared marker armed. Click the map." : "Marker placement cancelled.");
+              return next;
+            });
           }}
         >
           All
         </button>
-        {canAdminMarkers ? (
-          <button
-            type="button"
-            disabled={!advId}
-            className={`px-2 py-1 rounded text-white ${armedScope === "all" && armedHidden ? "bg-zinc-800" : "bg-zinc-600"}`}
-            onClick={() => {
-              if (!advId) return;
-              setArmedHidden(true);
-              setArmedScope((current) => current === "all" && armedHidden ? null : "all");
-            }}
-          >
-            Hidden
-          </button>
-        ) : null}
         {canAdminMarkers ? (
           <button
             type="button"
@@ -766,6 +774,11 @@ export default function TileMap(props: {
         <div className="ml-auto mr-2 rounded bg-black/75 px-2 py-1 text-white tabular-nums">
           x:{mouseSource ? mouseSource.x : "-"} y:{mouseSource ? mouseSource.y : "-"}
         </div>
+        {markerStatus ? (
+          <div className="mr-2 max-w-[min(360px,calc(100%-1rem))] rounded bg-black/75 px-2 py-1 text-white">
+            {markerStatus}
+          </div>
+        ) : null}
       </FlexRow>
       {pendingMarker ? (
         <div
@@ -777,6 +790,21 @@ export default function TileMap(props: {
           <div className="mb-2 font-bold">
             {pendingMarker.hidden ? "Hidden K\u00f6z\u00f6s" : pendingMarker.scope === "all" ? "K\u00f6z\u00f6s" : "Self marker"}
           </div>
+          {canAdminMarkers && pendingMarker.scope === "all" ? (
+            <label className="mb-2 flex items-center gap-2 text-white">
+              <input
+                type="checkbox"
+                checked={pendingMarker.hidden === true}
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
+                  setPendingMarker((current) =>
+                    current ? { ...current, hidden: checked } : current
+                  );
+                }}
+              />
+              Hidden
+            </label>
+          ) : null}
           <div className="mb-2 flex flex-wrap gap-1">
             {["#3b82f6", "#22c55e", "#ef4444", "#f59e0b", "#a855f7", "#111827"].map((color) => (
               <button

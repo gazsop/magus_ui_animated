@@ -11,6 +11,7 @@ import { formatClientDateTime } from "@/core/datetime";
 import { applyWindowNotificationEvent } from "./uiReducers";
 import { useWindowRegistry } from "./windowRegistryContext";
 import { TSetState } from "@/utils/common";
+import { defineWindowRegistration } from "@/windows/windowFactory";
 
 export type TChatPolicy = {
   allowUserDirect: boolean;
@@ -59,28 +60,20 @@ const buildChatWindowDef = (
 ): IWindowsLayerWindowProps => {
   const windowName = `CHAT:${uid}`;
   const iconText = (uid === "__all" ? "AL" : name.slice(0, 2)).toUpperCase();
-  return {
+  return defineWindowRegistration({
+    id: windowName,
     name: windowName,
-    icon: <>{iconText}</>,
+    kind: "chat",
+    title: `Chat - ${name}`,
+    icon: iconText,
+    params: { uid, name },
     hasNotification,
     defaultOpen: true,
     allowedPages: LOGGED_IN_PAGES,
     keepStateAcrossPages: true,
     launcherGroup: "chat",
     launcherVisible: false,
-    descriptor: {
-      id: windowName,
-      kind: "chat",
-      title: `Chat - ${name}`,
-      icon: iconText,
-      params: { uid, name },
-      defaultOpen: true,
-      allowedPages: LOGGED_IN_PAGES,
-      keepStateAcrossPages: true,
-      launcherGroup: "chat",
-      launcherVisible: false,
-    },
-  };
+  });
 };
 
 export function ChatWindowsProvider({

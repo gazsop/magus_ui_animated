@@ -12,6 +12,7 @@ import { debugLog } from "@/core/logger";
 import AllowedClassesSection from "./DescentEditor/AllowedClassesSection";
 import SecondaryStatInitialsSection from "./DescentEditor/SecondaryStatInitialsSection";
 import { toInt } from "@utils/common";
+import { defineWindowRegistration } from "@/windows/windowFactory";
 import { isConflictError } from "@/core/api/httpClient";
 import { buildTopLevelDiffPatch } from "@/core/api/patch";
 
@@ -361,17 +362,13 @@ function DescentHandling() {
 
   const openDescentWindow = (descentId: string) => {
     const windowName = `DescentHandling-${descentId}`;
-    windowsLayer.addWindow({
-      name: windowName,
-      icon: <>DH</>,
-      descriptor: {
-        id: windowName,
-        kind: "admin-descent-editor",
-        title: "Descent",
-        icon: "DH",
-        params: { descentId },
-      },
-    });
+    windowsLayer.addWindow(defineWindowRegistration({
+      id: windowName,
+      kind: "admin-descent-editor",
+      title: "Descent",
+      icon: "DH",
+      params: { descentId },
+    }));
   };
 
   return (

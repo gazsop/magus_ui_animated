@@ -115,7 +115,7 @@ public/imgs/tiles/{zoom}/{column}/{row}.png
 
 Current map constants are fixed in the client for zoom levels `1..6` and `512px` square tiles. The existing PWA asset precache includes these PNG tiles in production builds, and the custom service worker also applies cache-first runtime caching for images and tile assets with a large one-year cache.
 
-The map also loads adventure-scoped persistent markers through `/ynev/markers/get` with the active `advId`. `Self` creates private markers for the current adventure, `All` creates shared markers for the current adventure, and placement opens a color/comment dialog before saving. Admins and superadmins also get a `Hidden` placement button for hidden shared markers: hidden markers are visible only to admins until they are revealed from the marker popup. Saved markers use the selected color as the pin fill and show the creator in the popup. Search results use a temporary red marker unless saved through one of those buttons. All-marker chat event coordinates are clickable and open the YNEV map centered on that source coordinate.
+The map also loads adventure-scoped persistent markers through `/ynev/markers/get` with the active `advId`. `Self` creates private markers for the current adventure, `All` creates shared markers for the current adventure, and placement opens a color/comment dialog before saving. The map shows explicit marker placement status such as armed, accepted, saving, saved, and failed so production marker API problems are visible to the user. Admins and superadmins can mark shared `All` markers as `Hidden` from a checkbox in the placement dialog: hidden markers are visible only to admins until they are revealed from the marker popup. Saved markers use the selected color as the pin fill and show the creator in the popup. Search results use a temporary red marker unless saved through one of those buttons. All-marker chat event coordinates are clickable and open the YNEV map centered on that source coordinate without creating an extra temporary marker.
 
 Admins and superadmins also get a `Cities` toggle. It renders linked city-map points from `public/data/ynev_locations.json` rows that include a `url`, opening a small map bubble with a `térkép` link.
 
@@ -275,7 +275,7 @@ Adventure admin character views:
 - Item aura editing can mark item auras as equipped-only or carried-or-equipped; carried item auras display and apply from inventory.
 - Admin adventure character view can add, edit, and remove existing manual user auras through the shared aura modal.
 - Admin REST item-handling keeps the item aura editor in a dedicated stacked block so aura controls wrap cleanly without overlapping at narrower window sizes.
-- Combat mode creates pending initiative rows in the admin adventure commands area, applies a red full-screen phase overlay to all adventure clients, and pops up a required `k10` input for each player. Submitted player rolls update the admin initiative order through the combat runtime state.
+- Combat mode creates pending initiative rows in the admin adventure commands area, applies a red full-screen phase overlay to adventure clients, and pops up a required `k10` input for each player. On player character pages the red overlay scales with current HP: lower HP produces a stronger red tint and inset glow. Submitted player rolls update the admin initiative order through the combat runtime state.
 - Vendor mode applies a white full-screen phase overlay to all adventure clients.
 - The SSE ping/pong heartbeat carries the mounted page's latest known adventure/character hashes. If the server reports stale data, the relevant page gently refetches and updates React state in the background instead of forcing a route reload.
 - Production quiet errors are supported with `setError(message, { severity: "quiet" })` and `useRequest({ errorMode: "quiet" })`: background failures are still reported to server telemetry but do not open the blocking error modal outside development.
@@ -285,13 +285,18 @@ Window launcher behavior:
 - The right-side chat/presence launcher stack starts from the top of the screen.
 - The chat/presence launcher lists all users except the current user; offline users are red, inactive online users are yellow, and active online users are green.
 - Page/admin/general launcher groups are anchored from the bottom of the screen.
+- Interacting with or reopening a registered window brings it to the front with a higher dynamic z-index below the launcher layer.
 - Open launcher windows can be minimized from the window header.
 - Clicking an already-open launcher window icon minimizes that window.
+- Clicking an already-open chat/presence launcher badge minimizes its chat window; clicking it again reopens the same chat target.
 - Launcher dividers render only between non-empty groups.
 - Non-built-in windows can be pinned/unpinned from the launcher with right click.
 - User-pinned launcher windows persist descriptor-safe records in browser `localStorage`.
 - Window definitions are descriptor-only. Callers provide serializable descriptor fields (`id`, `kind`, `title`, `icon`, `params`, launcher metadata, page rules), and the window layer renders through the descriptor registry.
+- `src/pages/WindowsLayer.tsx` is the provider/composition layer; reducer transitions live in `src/windows/windowState.ts`, pinned-window storage in `src/windows/windowStorage.ts`, and launcher rendering in `src/windows/WindowLaunchers.tsx`.
+- New descriptor-backed callers should use `defineWindowRegistration(...)` from `src/windows/windowFactory.tsx` so descriptor metadata and launcher metadata are not duplicated.
 - Descriptor renderers are registered centrally in `src/windows/windowDescriptorRenderers.tsx` by `kind`.
+- Common `RndContainer` descriptor windows use the shared `RndDescriptorWindow` wrapper inside `src/windows/windowDescriptorRenderers.tsx`; special renderers keep only their extra state or provider lookups.
 - Stateful descriptor renderers read from domain providers instead of page-local JSX closures:
   - `ChatWindowsProvider` owns chat threads, all-room messages, typing state, unread updates, and presence log actions.
   - `AdminAdventureCharactersProvider` owns admin adventure character identities, detailed reload state, and character-data descriptor lookup.

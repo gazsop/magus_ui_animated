@@ -33,6 +33,36 @@ export type TWindowDescriptorRenderer = (
 
 const descriptorRenderers: Record<string, TWindowDescriptorRenderer> = {};
 
+const RndDescriptorWindow = ({
+  descriptor,
+  props,
+  children,
+  id,
+  aditionalIcons = null,
+  onSizeChange,
+}: {
+  descriptor: TWindowDescriptor;
+  props: TWindowRenderProps;
+  children: JSX.Element | JSX.Element[];
+  id?: string;
+  aditionalIcons?: JSX.Element | null;
+  onSizeChange?: (size: { width: number; height: number }) => void;
+}) => (
+  <RndContainer
+    id={id ?? descriptor.id}
+    aditionalIcons={aditionalIcons}
+    close={props.close}
+    minimize={props.minimize}
+    selectWindow={props.selectWindow}
+    zIndex={props.zIndex}
+    label={descriptor.title}
+    className={props.classes}
+    onSizeChange={onSizeChange}
+  >
+    {children}
+  </RndContainer>
+);
+
 export const registerWindowDescriptorRenderer = (
   kind: string,
   renderer: TWindowDescriptorRenderer
@@ -54,58 +84,36 @@ registerWindowDescriptorRenderer("ai-chat", (_descriptor, props) => (
 ));
 
 registerWindowDescriptorRenderer("wiki", (descriptor, props) => (
-  <RndContainer
-    id={descriptor.id}
-    aditionalIcons={null}
-    close={props.close}
-    minimize={props.minimize}
-    label={descriptor.title}
-    className={props.classes}
-  >
+  <RndDescriptorWindow descriptor={descriptor} props={props}>
     <Wiki />
-  </RndContainer>
+  </RndDescriptorWindow>
 ));
 
 registerWindowDescriptorRenderer("external-frame", (descriptor, props) => (
-  <RndContainer
-    id={descriptor.id}
-    aditionalIcons={null}
-    close={props.close}
-    minimize={props.minimize}
-    label={descriptor.title}
-    className={props.classes}
-  >
+  <RndDescriptorWindow descriptor={descriptor} props={props}>
     <iframe
       src={descriptor.params?.src || "about:blank"}
       className="grow"
       title={descriptor.title}
     />
-  </RndContainer>
+  </RndDescriptorWindow>
 ));
 
 const TileMapDescriptorWindow = ({
   descriptor,
-  close,
-  minimize,
-  classes,
+  props,
 }: {
   descriptor: TWindowDescriptor;
-  close: () => void;
-  minimize: () => void;
-  classes?: string;
+  props: TWindowRenderProps;
 }) => {
   const [resizeKey, setResizeKey] = useState(0);
   const handleSizeChange = useCallback(() => {
     setResizeKey((prev) => prev + 1);
   }, []);
   return (
-    <RndContainer
-      id={descriptor.id}
-      aditionalIcons={null}
-      close={close}
-      minimize={minimize}
-      label={descriptor.title}
-      className={classes}
+    <RndDescriptorWindow
+      descriptor={descriptor}
+      props={props}
       onSizeChange={handleSizeChange}
     >
       <TileMap
@@ -115,43 +123,24 @@ const TileMapDescriptorWindow = ({
         jumpY={descriptor.params?.jumpY}
         jumpNonce={descriptor.params?.jumpNonce}
       />
-    </RndContainer>
+    </RndDescriptorWindow>
   );
 };
 
 registerWindowDescriptorRenderer("tile-map", (descriptor, props) => (
-  <TileMapDescriptorWindow
-    descriptor={descriptor}
-    close={props.close}
-    minimize={props.minimize}
-    classes={props.classes}
-  />
+  <TileMapDescriptorWindow descriptor={descriptor} props={props} />
 ));
 
 registerWindowDescriptorRenderer("shared-notes", (descriptor, props) => (
-  <RndContainer
-    id={descriptor.id}
-    close={props.close}
-    minimize={props.minimize}
-    label={descriptor.title}
-    className={props.classes}
-    aditionalIcons={null}
-  >
+  <RndDescriptorWindow descriptor={descriptor} props={props}>
     <SharedAdventureNotes advId={descriptor.params?.advId || ""} mode="shared" />
-  </RndContainer>
+  </RndDescriptorWindow>
 ));
 
 registerWindowDescriptorRenderer("private-notes", (descriptor, props) => (
-  <RndContainer
-    id={descriptor.id}
-    close={props.close}
-    minimize={props.minimize}
-    label={descriptor.title}
-    className={props.classes}
-    aditionalIcons={null}
-  >
+  <RndDescriptorWindow descriptor={descriptor} props={props}>
     <SharedAdventureNotes advId={descriptor.params?.advId || ""} mode="private" />
-  </RndContainer>
+  </RndDescriptorWindow>
 ));
 
 registerWindowDescriptorRenderer("chat", (descriptor, props) => (
@@ -164,29 +153,15 @@ registerWindowDescriptorRenderer("chat", (descriptor, props) => (
 ));
 
 registerWindowDescriptorRenderer("admin-page", (descriptor, props) => (
-  <RndContainer
-    id={descriptor.id}
-    aditionalIcons={null}
-    close={props.close}
-    minimize={props.minimize}
-    label={descriptor.title}
-    className={props.classes}
-  >
+  <RndDescriptorWindow descriptor={descriptor} props={props}>
     <Admin />
-  </RndContainer>
+  </RndDescriptorWindow>
 ));
 
 registerWindowDescriptorRenderer("dev-page", (descriptor, props) => (
-  <RndContainer
-    id={descriptor.id}
-    aditionalIcons={null}
-    close={props.close}
-    minimize={props.minimize}
-    label={descriptor.title}
-    className={props.classes}
-  >
+  <RndDescriptorWindow descriptor={descriptor} props={props}>
     <Dev />
-  </RndContainer>
+  </RndDescriptorWindow>
 ));
 
 const AdminRestDescriptorWindow = ({
@@ -227,16 +202,14 @@ const renderAdminRestDescriptor: TWindowDescriptorRenderer = (descriptor, props)
 ].forEach((kind) => registerWindowDescriptorRenderer(kind, renderAdminRestDescriptor));
 
 registerWindowDescriptorRenderer("admin-character-viewer", (descriptor, props) => (
-  <RndContainer
+  <RndDescriptorWindow
+    descriptor={descriptor}
+    props={props}
     id={`char_${descriptor.params?.advId || "0"}_${descriptor.params?.uid || "unknown"}`}
     aditionalIcons={<>AI</>}
-    close={props.close}
-    minimize={props.minimize}
-    label={descriptor.title}
-    className={props.classes}
   >
     <CharacterPage advId={descriptor.params?.advId || ""} />
-  </RndContainer>
+  </RndDescriptorWindow>
 ));
 
 registerWindowDescriptorRenderer("admin-descent-editor", (descriptor, props) => (
@@ -271,14 +244,7 @@ export const renderWindowDescriptor = (
   if (renderer) return renderer(descriptor, props);
 
   return (
-    <RndContainer
-      id={descriptor.id}
-      aditionalIcons={null}
-      close={props.close}
-      minimize={props.minimize}
-      label={descriptor.title}
-      className={props.classes}
-    >
+    <RndDescriptorWindow descriptor={descriptor} props={props}>
       <FlexCol className="p-3 gap-2 min-w-[260px] max-w-[360px]">
         <p className="font-semibold">{descriptor.title}</p>
         <p className="text-sm">
@@ -289,6 +255,6 @@ export const renderWindowDescriptor = (
           Close
         </button>
       </FlexCol>
-    </RndContainer>
+    </RndDescriptorWindow>
   );
 };

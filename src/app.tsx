@@ -48,6 +48,7 @@ import { ensurePushSubscription, getPushPermissionState, TPushPermissionState } 
 import { PresenceUIProvider, usePresenceUI } from "./contexts/presenceUIContext";
 import { applyPresenceEvent } from "./contexts/uiReducers";
 import { WindowRegistryProvider, useWindowRegistry } from "./contexts/windowRegistryContext";
+import { defineWindowRegistration } from "./windows/windowFactory";
 import { AdminAdventureCharactersProvider } from "./contexts/adminAdventureCharactersContext";
 import {
   ChatWindowRegistryBridge,
@@ -620,85 +621,69 @@ function UIElement(props: {
     }
   );
   const pinnedWindows: IWindowsLayerWindowProps[] = useMemo(() => [
-    {
-      name: "AI Chat",
-      icon: <SparklesIcon className="w-4 h-4" />,
-      descriptor: {
-        id: "AI Chat",
-        kind: "ai-chat",
-        title: "AI Chat",
-        icon: "AI",
-        defaultOpen: false,
-        allowedPages: LOGGED_IN_PAGES,
-        keepStateAcrossPages: true,
-        launcherGroup: "general",
+    defineWindowRegistration({
+      id: "AI Chat",
+      kind: "ai-chat",
+      title: "AI Chat",
+      icon: "AI",
+      iconElement: <SparklesIcon className="w-4 h-4" />,
+      defaultOpen: false,
+      allowedPages: LOGGED_IN_PAGES,
+      keepStateAcrossPages: true,
+      launcherGroup: "general",
+    }),
+    defineWindowRegistration({
+      id: "YNEV",
+      kind: "tile-map",
+      title: "YNEV",
+      icon: "YN",
+      iconElement: <GlobeIcon className="w-4 h-4" />,
+      params: {
+        advId: activeAdventureId,
       },
-    },
-    {
-      name: "YNEV",
-      icon: <GlobeIcon className="w-4 h-4" />,
-      descriptor: {
-        id: "YNEV",
-        kind: "tile-map",
-        title: "YNEV",
-        icon: "YN",
-        params: {
-          advId: activeAdventureId,
-        },
-        defaultOpen: false,
-        allowedPages: LOGGED_IN_PAGES,
-        keepStateAcrossPages: true,
-        launcherGroup: "general",
-      },
-    },
-    {
-      name: "Wiki",
-      icon: <SearchIcon className="w-4 h-4" />,
-      descriptor: {
-        id: "Wiki",
-        kind: "wiki",
-        title: "Wiki",
-        icon: "WK",
-        defaultOpen: false,
-        allowedPages: LOGGED_IN_PAGES,
-        keepStateAcrossPages: true,
-        launcherGroup: "general",
-      },
-    },
+      defaultOpen: false,
+      allowedPages: LOGGED_IN_PAGES,
+      keepStateAcrossPages: true,
+      launcherGroup: "general",
+    }),
+    defineWindowRegistration({
+      id: "Wiki",
+      kind: "wiki",
+      title: "Wiki",
+      icon: "WK",
+      iconElement: <SearchIcon className="w-4 h-4" />,
+      defaultOpen: false,
+      allowedPages: LOGGED_IN_PAGES,
+      keepStateAcrossPages: true,
+      launcherGroup: "general",
+    }),
     ...(isAdmin
       ? [
-          {
-            name: "Admin",
-            icon: <SettingsIcon className="w-4 h-4" />,
-            descriptor: {
-              id: "Admin",
-              kind: "admin-page",
-              title: "Admin",
-              icon: "AD",
-              defaultOpen: false,
-              allowedPages: LOGGED_IN_PAGES,
-              keepStateAcrossPages: true,
-              launcherGroup: "admin" as const,
-            },
-          },
+          defineWindowRegistration({
+            id: "Admin",
+            kind: "admin-page",
+            title: "Admin",
+            icon: "AD",
+            iconElement: <SettingsIcon className="w-4 h-4" />,
+            defaultOpen: false,
+            allowedPages: LOGGED_IN_PAGES,
+            keepStateAcrossPages: true,
+            launcherGroup: "admin",
+          }),
         ]
       : []),
     ...(isSuperAdmin
       ? [
-          {
-            name: "Dev",
-            icon: <>DV</>,
-            descriptor: {
-              id: "Dev",
-              kind: "dev-page",
-              title: "Dev",
-              icon: "DV",
-              defaultOpen: false,
-              allowedPages: LOGGED_IN_PAGES,
-              keepStateAcrossPages: true,
-              launcherGroup: "admin" as const,
-            },
-          },
+          defineWindowRegistration({
+            id: "Dev",
+            kind: "dev-page",
+            title: "Dev",
+            icon: "DV",
+            defaultOpen: false,
+            allowedPages: LOGGED_IN_PAGES,
+            keepStateAcrossPages: true,
+            launcherGroup: "admin",
+          }),
         ]
       : []),
   ], [activeAdventureId, isAdmin, isSuperAdmin]);
@@ -883,6 +868,7 @@ function UIElement(props: {
 
     return Array.from(baseByUid.values()).map((u) => ({
       ...u,
+      windowName: `CHAT:${u.uid}`,
       onClick: () => setChatTarget({ uid: u.uid, name: u.name }),
       hasNotification: (unreadByPeer[u.uid] || 0) > 0,
     }));
@@ -893,6 +879,7 @@ function UIElement(props: {
       name: "All",
       active: true,
       status: "active" as const,
+      windowName: "CHAT:__all",
       onClick: () => setChatTarget({ uid: "__all", name: "All Room" }),
       hasNotification: (unreadByPeer.__all || 0) > 0,
       style: mutedChatLauncherStyle,
@@ -902,6 +889,12 @@ function UIElement(props: {
   const isAdventureSurface =
     pSt === PageState.CHAR_SHEET ||
     (pSt === PageState.ADMIN && window.location.pathname === "/admin/adventures");
+  const hpDanger = combatBadge.hpRatio === null || combatBadge.hpRatio === undefined
+    ? 0
+    : 1 - Math.max(0, Math.min(1, combatBadge.hpRatio));
+  const combatOverlayAlpha = 0.07 + hpDanger * 0.23;
+  const combatGlowAlpha = 0.35 + hpDanger * 0.55;
+  const combatGlowSpread = 60 + hpDanger * 70;
 
   useEffect(() => {
     if (!isLoggedIn && pSt !== PageState.LOGIN) {
@@ -940,9 +933,11 @@ function UIElement(props: {
           className="fixed top-0 left-0 w-screen h-screen pointer-events-none"
           style={{
             zIndex: 10000,
-            backgroundColor: combatBadge.enabled ? "rgba(255, 0, 0, 0.07)" : "transparent",
+            backgroundColor: combatBadge.enabled
+              ? `rgba(255, 0, 0, ${combatOverlayAlpha.toFixed(3)})`
+              : "transparent",
             boxShadow: combatBadge.enabled
-              ? "inset 0 0 60px rgb(249, 113, 113)"
+              ? `inset 0 0 ${combatGlowSpread.toFixed(0)}px rgba(249, 113, 113, ${combatGlowAlpha.toFixed(3)})`
               : "inset 0 0 60px rgb(255, 255, 255)",
           }}
         />
@@ -1092,28 +1087,19 @@ function SharedAdventureNotesWindowBridge({
       name: "Shared Notes" | "Private Notes",
       kind: "shared-notes" | "private-notes",
       icon: "NT" | "PN"
-    ): IWindowsLayerWindowProps => ({
-      name,
-      icon: <>{icon}</>,
+    ): IWindowsLayerWindowProps => defineWindowRegistration({
+      id: name,
+      kind,
+      title: name,
+      icon,
+      params: {
+        advId: activeAdventureId,
+      },
       defaultOpen: false,
       persistentLauncher: true,
       allowedPages: [PageState.CHAR_SHEET],
       keepStateAcrossPages: true,
       launcherGroup: "page",
-      descriptor: {
-        id: name,
-        kind,
-        title: name,
-        icon,
-        params: {
-          advId: activeAdventureId,
-        },
-        defaultOpen: false,
-        persistentLauncher: true,
-        allowedPages: [PageState.CHAR_SHEET],
-        keepStateAcrossPages: true,
-        launcherGroup: "page",
-      },
     });
     const windowDefs = [
       createNotesWindow("Shared Notes", "shared-notes", "NT"),
@@ -1142,35 +1128,27 @@ function YnevWindowBridge({
   const { registerWindow, updateWindow } = useWindowRegistry();
 
   useEffect(() => {
-    const buildYnevWindow = (jump?: { x: number; y: number; nonce: string }): IWindowsLayerWindowProps => ({
-      name: "YNEV",
-      icon: <GlobeIcon className="w-4 h-4" />,
+    const buildYnevWindow = (jump?: { x: number; y: number; nonce: string }): IWindowsLayerWindowProps => defineWindowRegistration({
+      id: "YNEV",
+      kind: "tile-map",
+      title: "YNEV",
+      icon: "YN",
+      iconElement: <GlobeIcon className="w-4 h-4" />,
+      params: {
+        advId: activeAdventureId,
+        ...(jump
+          ? {
+              jumpX: String(jump.x),
+              jumpY: String(jump.y),
+              jumpNonce: jump.nonce,
+            }
+          : {}),
+      },
       defaultOpen: Boolean(jump),
       persistentLauncher: true,
       allowedPages: LOGGED_IN_PAGES,
       keepStateAcrossPages: true,
       launcherGroup: "general",
-      descriptor: {
-        id: "YNEV",
-        kind: "tile-map",
-        title: "YNEV",
-        icon: "YN",
-        params: {
-          advId: activeAdventureId,
-          ...(jump
-            ? {
-                jumpX: String(jump.x),
-                jumpY: String(jump.y),
-                jumpNonce: jump.nonce,
-              }
-            : {}),
-        },
-        defaultOpen: Boolean(jump),
-        persistentLauncher: true,
-        allowedPages: LOGGED_IN_PAGES,
-        keepStateAcrossPages: true,
-        launcherGroup: "general",
-      },
     });
     updateWindow("YNEV", buildYnevWindow());
     const handleJump = (event: Event) => {

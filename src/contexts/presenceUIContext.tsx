@@ -3,6 +3,7 @@ import { Dispatch, StateUpdater } from "preact/hooks";
 import { IOnlineUserBadge } from "@/pages/WindowsLayer";
 
 type ChatTarget = { uid: string; name: string } | null;
+type TCombatBadge = { enabled: boolean; turn: number; hpRatio?: number | null };
 
 interface IPresenceUIContext {
   onlineBadges: Record<string, IOnlineUserBadge>;
@@ -11,8 +12,8 @@ interface IPresenceUIContext {
   setUnreadByPeer: Dispatch<StateUpdater<Record<string, number>>>;
   chatTarget: ChatTarget;
   setChatTarget: Dispatch<StateUpdater<ChatTarget>>;
-  combatBadge: { enabled: boolean; turn: number };
-  setCombatBadge: Dispatch<StateUpdater<{ enabled: boolean; turn: number }>>;
+  combatBadge: TCombatBadge;
+  setCombatBadge: Dispatch<StateUpdater<TCombatBadge>>;
 }
 
 const PresenceUIContext = createContext<IPresenceUIContext | null>(null);
@@ -21,9 +22,10 @@ export function PresenceUIProvider(props: { children: JSX.Element | JSX.Element[
   const [onlineBadges, setOnlineBadges] = useState<Record<string, IOnlineUserBadge>>({});
   const [chatTarget, setChatTarget] = useState<ChatTarget>(null);
   const [unreadByPeer, setUnreadByPeer] = useState<Record<string, number>>({});
-  const [combatBadge, setCombatBadge] = useState<{ enabled: boolean; turn: number }>({
+  const [combatBadge, setCombatBadge] = useState<TCombatBadge>({
     enabled: false,
     turn: 0,
+    hpRatio: null,
   });
 
   const value = useMemo(

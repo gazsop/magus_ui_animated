@@ -23,6 +23,8 @@ const MIN_WINDOW_SIZE = 240;
 
 export const RndWindowControlsContext = createContext<{
   minimize?: () => void;
+  selectWindow?: () => void;
+  zIndex?: number;
 } | null>(null);
 
 function RndContainer({
@@ -30,6 +32,8 @@ function RndContainer({
   aditionalIcons,
   close,
   minimize,
+  selectWindow,
+  zIndex,
   label,
   children,
   onDragStart,
@@ -41,6 +45,8 @@ function RndContainer({
   aditionalIcons: JSX.Element | null;
   close: () => void;
   minimize?: () => void;
+  selectWindow?: () => void;
+  zIndex?: number;
   label: string;
   children: JSX.Element | JSX.Element[];
   onDragStart?: (e: RndDragEvent) => void;
@@ -50,6 +56,11 @@ function RndContainer({
 }) {
   const inheritedControls = useContext(RndWindowControlsContext);
   const effectiveMinimize = minimize ?? inheritedControls?.minimize;
+  const effectiveSelectWindow = selectWindow ?? inheritedControls?.selectWindow;
+  const effectiveZIndex = zIndex ?? inheritedControls?.zIndex ?? "var(--layer-window)";
+  const bringToFront = () => {
+    effectiveSelectWindow?.();
+  };
   const getViewportSize = () => ({
     width: Math.floor(window.visualViewport?.width || window.innerWidth),
     height: Math.floor(window.visualViewport?.height || window.innerHeight),
@@ -132,7 +143,10 @@ function RndContainer({
         id={id}
         size={{ width: windowSize.width, height: windowSize.height }}
         position={{ x: windowPosition.x, y: windowPosition.y }}
+        onMouseDown={bringToFront}
+        onTouchStart={bringToFront}
         onDragStart={(e: RndDragEvent) => {
+          bringToFront();
           if (e && onDragStart) onDragStart(e);
           if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
             const target = e.target as HTMLElement;
@@ -211,7 +225,7 @@ function RndContainer({
         resizeGrid={[20, 20]}
         dragGrid={[20, 20]}
         style={{
-          zIndex: "var(--layer-window)",
+          zIndex: effectiveZIndex,
         }}
       >
         <FancyWindow height={windowSize.height} width={windowSize.width}>
@@ -226,6 +240,7 @@ function RndContainer({
               <RefreshCwIcon
                 className="h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer"
                 onClick={() => {
+                  bringToFront();
                   setOnDragState(true);
                   setResizeable(false);
                   setWindowPosition({ x: getXOff(), y: getYOff() });
@@ -241,6 +256,7 @@ function RndContainer({
                   onDragState ? "text-[#22c55e]" : ""
                 }`}
                 onClick={() => {
+                  bringToFront();
                   setOnDragState((prev) => !prev);
                 }}
               />
@@ -248,7 +264,10 @@ function RndContainer({
                 className={`h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer ${
                   resizeable ? "text-[#22c55e]" : ""
                 }`}
-                onClick={() => setResizeable((prev) => !prev)}
+                onClick={() => {
+                  bringToFront();
+                  setResizeable((prev) => !prev);
+                }}
               />
               {effectiveMinimize ? (
                 <span onClick={effectiveMinimize}>

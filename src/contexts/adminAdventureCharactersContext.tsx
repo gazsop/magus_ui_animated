@@ -9,6 +9,7 @@ import { IWindowsLayerWindowProps } from "@pages/WindowsLayer";
 import { PageState } from "@/app/navigation";
 import { parseCharacterPayload } from "@pages/Character/utils/characterPayload";
 import { withHmDefaults } from "@/utils/hm";
+import { defineWindowRegistration } from "@/windows/windowFactory";
 
 export type CharacterIdentity = {
   id: string;
@@ -44,25 +45,18 @@ export const toCharacterIdentity = (
 export const buildAdventureCharacterDataWindowDescriptor = (
   advId: string,
   entry: CharacterIdentity
-): IWindowsLayerWindowProps => ({
-  name: `ADV-CHAR-DATA-${advId}-${entry.id}`,
-  icon: <>CH</>,
+): IWindowsLayerWindowProps => defineWindowRegistration({
+  id: `ADV-CHAR-DATA-${advId}-${entry.id}`,
+  kind: "admin-adventure-character-data",
+  title: `Character Data - ${entry.name}`,
+  icon: "CH",
+  params: {
+    advId,
+    uid: entry.id,
+  },
   defaultOpen: true,
   allowedPages: [PageState.CHAR_SHEET],
   keepStateAcrossPages: true,
-  descriptor: {
-    id: `ADV-CHAR-DATA-${advId}-${entry.id}`,
-    kind: "admin-adventure-character-data",
-    title: `Character Data - ${entry.name}`,
-    icon: "CH",
-    params: {
-      advId,
-      uid: entry.id,
-    },
-    defaultOpen: true,
-    allowedPages: [PageState.CHAR_SHEET],
-    keepStateAcrossPages: true,
-  },
 });
 
 type TAdminAdventureCharactersContext = {

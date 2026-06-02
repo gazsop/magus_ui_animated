@@ -2,6 +2,7 @@ import { ButtonUnq } from "@components/GeneralElements";
 import { FlexRow } from "@components/Flex";
 import { IWindowsLayerWindowProps, useWindowsLayer } from "@pages/WindowsLayer";
 import ClipboardIcon from "@components/icons/general/ClipboardIcon";
+import { defineWindowRegistration } from "@/windows/windowFactory";
 
 type TRestWindowKind =
   | "admin-rest"
@@ -25,16 +26,14 @@ export default function AdminRestDataHandling() {
   const windowsLayer = useWindowsLayer();
   const openRestWindow = (kind: TRestWindowKind) => {
     const def = REST_WINDOW_DEFS[kind];
-    windowsLayer.addWindow({
+    windowsLayer.addWindow(defineWindowRegistration({
+      id: def.name,
       name: def.name,
-      icon: typeof def.icon === "string" ? <>{def.icon}</> : def.icon,
-      descriptor: {
-        id: def.name,
-        kind,
-        title: def.title,
-        icon: def.descriptorIcon,
-      },
-    });
+      kind,
+      title: def.title,
+      icon: def.descriptorIcon,
+      iconElement: typeof def.icon === "string" ? <>{def.icon}</> : def.icon,
+    }));
   };
   const openRestHandling = () => openRestWindow("admin-rest");
   const openProfessions = () => openRestWindow("admin-professions");

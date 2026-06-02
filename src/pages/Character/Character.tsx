@@ -33,6 +33,7 @@ import {
 import RndContainer from "@components/RndContainer";
 import { useAdventureSseSubscription, useSyncStatusSubscription } from "@hooks/sse";
 import { useSseContext } from "@contexts/sseContext";
+import { usePresenceUI } from "@contexts/presenceUIContext";
 import { createPortal } from "preact/compat";
 import { debugLog } from "@/core/logger";
 import { createEmptyHm } from "@/utils/hm";
@@ -44,6 +45,7 @@ import {
   TWindowDescriptorRenderer,
   unregisterWindowDescriptorRenderer,
 } from "@/windows/windowDescriptorRenderers";
+import { defineWindowRegistration } from "@/windows/windowFactory";
 
 type TLayoutBlockId =
   | "header_xp"
@@ -252,6 +254,7 @@ export default function CharacterPage({
   const [restRequest] = useRequest(Application.REQUEST_CONTROLLER.REST);
   const { user, descents, classes } = useDataContext();
   const { setSyncSnapshot } = useSseContext();
+  const { setCombatBadge } = usePresenceUI();
   const { addWindow } = useWindowsLayer();
   const [religions, setReligions] = useState<Array<{ name: string; value: string }>>([]);
   const [personalities, setPersonalities] = useState<Array<{ name: string; value: string }>>([]);
@@ -453,6 +456,24 @@ export default function CharacterPage({
 
   useEffect(() => setDisableNavArrows({ left: false, right: true }), []);
   useEffect(() => {
+    const currentHp = Number(selectedCharacter.resource?.health?.currentHp || 0);
+    const maxHp = Number(selectedCharacter.resource?.health?.maxHp || 0);
+    const hpRatio =
+      maxHp > 0 && Number.isFinite(currentHp)
+        ? Math.max(0, Math.min(1, currentHp / maxHp))
+        : null;
+    setCombatBadge((prev) => (prev.hpRatio === hpRatio ? prev : { ...prev, hpRatio }));
+    return () => {
+      setCombatBadge((prev) =>
+        prev.hpRatio === null || prev.hpRatio === undefined ? prev : { ...prev, hpRatio: null }
+      );
+    };
+  }, [
+    selectedCharacter.resource?.health?.currentHp,
+    selectedCharacter.resource?.health?.maxHp,
+    setCombatBadge,
+  ]);
+  useEffect(() => {
     const onSet = (evt: Event) => {
       const detail = (evt as CustomEvent<boolean>).detail;
       setIsLayoutEdit(!isMobileLayout && !!detail);
@@ -548,62 +569,39 @@ export default function CharacterPage({
     registerWindowDescriptorRenderer("character-avatar-editor", renderAvatarEditorWindow);
 
     const onToggleSpells = () => {
-      addWindow({
-        name: "CHAR_SPELLS",
-        icon: <>SP</>,
+      addWindow(defineWindowRegistration({
+        id: "CHAR_SPELLS",
+        kind: "character-spells",
+        title: "Spells",
+        icon: "SP",
         defaultOpen: true,
         allowedPages: [PageState.CHAR_SHEET],
         keepStateAcrossPages: true,
         launcherVisible: false,
-        descriptor: {
-          id: "CHAR_SPELLS",
-          kind: "character-spells",
-          title: "Spells",
-          icon: "SP",
-          defaultOpen: true,
-          allowedPages: [PageState.CHAR_SHEET],
-          keepStateAcrossPages: true,
-          launcherVisible: false,
-        },
-      });
+      }));
     };
     const onToggleSecondary = () => {
-      addWindow({
-        name: "CHAR_SECONDARY_SKILLS",
-        icon: <>SS</>,
+      addWindow(defineWindowRegistration({
+        id: "CHAR_SECONDARY_SKILLS",
+        kind: "character-secondary-skills",
+        title: "Secondary Skills",
+        icon: "SS",
         defaultOpen: true,
         allowedPages: [PageState.CHAR_SHEET],
         keepStateAcrossPages: true,
         launcherVisible: false,
-        descriptor: {
-          id: "CHAR_SECONDARY_SKILLS",
-          kind: "character-secondary-skills",
-          title: "Secondary Skills",
-          icon: "SS",
-          defaultOpen: true,
-          allowedPages: [PageState.CHAR_SHEET],
-          keepStateAcrossPages: true,
-          launcherVisible: false,
-        },
-      });
+      }));
     };
     const onOpenAvatarEditor = () => {
-      addWindow({
-        name: "CHAR_AVATAR_EDITOR",
-        icon: <>AV</>,
+      addWindow(defineWindowRegistration({
+        id: "CHAR_AVATAR_EDITOR",
+        kind: "character-avatar-editor",
+        title: "Avatar",
+        icon: "AV",
         defaultOpen: true,
         allowedPages: [PageState.CHAR_SHEET],
         keepStateAcrossPages: true,
-        descriptor: {
-          id: "CHAR_AVATAR_EDITOR",
-          kind: "character-avatar-editor",
-          title: "Avatar",
-          icon: "AV",
-          defaultOpen: true,
-          allowedPages: [PageState.CHAR_SHEET],
-          keepStateAcrossPages: true,
-        },
-      });
+      }));
     };
     window.addEventListener("character-toggle-spells", onToggleSpells as EventListener);
     window.addEventListener(

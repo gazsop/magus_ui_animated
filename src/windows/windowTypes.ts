@@ -3,10 +3,31 @@ import { PageState } from "@/app/navigation";
 
 export type TWindowLauncherGroup = "general" | "admin" | "page" | "chat";
 
+export interface IWindowsLayerShortcut {
+  name: string;
+  icon: JSX.Element;
+  onClick: () => void;
+  launcherGroup?: TWindowLauncherGroup;
+  className?: string;
+  style?: JSX.CSSProperties;
+}
+
+export interface IOnlineUserBadge {
+  uid: string;
+  name: string;
+  active: boolean;
+  status?: "active" | "inactive" | "offline";
+  windowName?: string;
+  onClick?: () => void;
+  hasNotification?: boolean;
+  style?: JSX.CSSProperties;
+}
+
 export type TWindowRenderProps = {
   close: () => void;
   minimize: () => void;
   selectWindow: () => void;
+  zIndex: number;
   classes?: string;
 };
 
@@ -55,4 +76,13 @@ export type TWindowState = {
   launcherVisible?: boolean;
   isOpen: boolean;
   basePersistentLauncher: boolean;
+};
+
+export type TPinnedWindowRecord = {
+  name: string;
+  descriptor?: TWindowDescriptor;
+  launcherGroup?: TWindowLauncherGroup;
+  allowedPages?: PageState[];
+  keepStateAcrossPages?: boolean;
+  launcherVisible?: boolean;
 };

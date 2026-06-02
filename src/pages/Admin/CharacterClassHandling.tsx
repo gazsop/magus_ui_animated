@@ -18,6 +18,7 @@ import { SecondaryStatLevelsElement } from "./CharacterSecondaryStatHandling";
 import { useDataContext } from "@contexts/dataContext";
 import useError from "@hooks/error";
 import usePopup from "@hooks/popup";
+import { defineWindowRegistration } from "@/windows/windowFactory";
 import SpecsSection from "./ClassEditor/SpecsSection";
 import { SpellsElement } from "./ClassEditor/SpellsElements";
 import SecondaryStatScalingsSection from "./ClassEditor/SecondaryStatScalingsSection";
@@ -1504,17 +1505,14 @@ function ClassHandling() {
 
   const openClassWindow = (classId: string) => {
     const windowName = `Class-${classId}`;
-    windowsLayer.addWindow({
-      name: windowName,
-      icon: <div>Class</div>,
-      descriptor: {
-        id: windowName,
-        kind: "admin-class-editor",
-        title: "Class",
-        icon: "CL",
-        params: { classId },
-      },
-    });
+    windowsLayer.addWindow(defineWindowRegistration({
+      id: windowName,
+      kind: "admin-class-editor",
+      title: "Class",
+      icon: "CL",
+      iconElement: <div>Class</div>,
+      params: { classId },
+    }));
   };
 
   return (

@@ -6,6 +6,7 @@ import { SelectUnq } from "@components/GeneralElements";
 import { Application, Character, ServerApi } from "@shared/contracts";
 import useError from "@hooks/error";
 import { debugLog } from "@/core/logger";
+import { defineWindowRegistration } from "@/windows/windowFactory";
 
 function CharacterHandling({ advId }: { advId: string }) {
   const { addWindow } = useWindowsLayer();
@@ -31,20 +32,17 @@ function CharacterHandling({ advId }: { advId: string }) {
   const buildCharacterWindow = (characterIndex: number): IWindowsLayerWindowProps => {
     const character = characters[characterIndex];
     const windowName = `Character-${advId}-${character?.uid || characterIndex}`;
-    return {
+    return defineWindowRegistration({
+      id: windowName,
       name: windowName,
-      icon: <>CH</>,
-      descriptor: {
-        id: windowName,
-        kind: "admin-character-viewer",
-        title: windowName,
-        icon: "CH",
-        params: {
-          advId,
-          uid: character?.uid || String(characterIndex),
-        },
+      kind: "admin-character-viewer",
+      title: windowName,
+      icon: "CH",
+      params: {
+        advId,
+        uid: character?.uid || String(characterIndex),
       },
-    };
+    });
   };
 
   useEffect(() => {
