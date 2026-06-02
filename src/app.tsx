@@ -557,7 +557,7 @@ function UIElement(props: {
         const patched = applyPresenceEvent(
           next,
           { uid: u.uid, name: u.name, active: u.active },
-          "active"
+          "upsert"
         );
         next = patched;
       });

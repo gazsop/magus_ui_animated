@@ -236,6 +236,7 @@ Character sheet currently includes:
 - damage tracking panel that updates current HP/EP and persists damage log entries
 - avatar upload (crop + ratio + fit mode) saved into character data
 - new-character RP wizard steps for class primary-stat rolls and initial HM allocation before RP details are finalized
+- new-character class preview renders the class `maxCarriedWeapons` value; admin class editing exposes the same field
 - level-up flow requires specialization selection when crossing level 10
   - desktop/tablet shows specialization cards in 2-4 columns with level 10-20 spell previews
   - mobile shows one specialization card per page with previous/next paging
@@ -250,6 +251,10 @@ Frontend reports errors through:
 - UI-level explicit errors (`useError`)
 
 Payloads include message, stack (when available), request/response context and extra metadata.
+
+AI chat:
+
+- The frontend sends only user/assistant conversation messages to `/ai/chat`; the system prompt is owned by the server.
 
 Admin adventure identity view:
 
@@ -289,6 +294,7 @@ Window launcher behavior:
 - Open launcher windows can be minimized from the window header.
 - Clicking an already-open launcher window icon minimizes that window.
 - Clicking an already-open chat/presence launcher badge minimizes its chat window; clicking it again reopens the same chat target.
+- Page-local Character subwindows use the shared window toggle path, so Spells and Secondary Skills minimize/reopen through their launcher shortcuts.
 - Launcher dividers render only between non-empty groups.
 - Non-built-in windows can be pinned/unpinned from the launcher with right click.
 - User-pinned launcher windows persist descriptor-safe records in browser `localStorage`.
@@ -313,6 +319,8 @@ Client-side subscriptions:
 Both streams use cookie auth (`withCredentials: true`).
 Event dispatching is centralized through `src/contexts/sseContext.tsx` and can be consumed via `useSseSubscription` (`src/hooks/sse.ts`).
 Chat windows subscribe to `chat:message`, `chat:allRoom`, `chat:typing`, and `chat:policy`.
+Presence badges hydrate from the global `connected` snapshot and then track live presence events.
+YNEV map markers update from adventure SSE and silently refresh while the map window is open to recover from missed production stream events.
 
 ## Render-Stability Architecture
 

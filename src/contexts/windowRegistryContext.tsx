@@ -12,19 +12,21 @@ interface IWindowRegistryContext {
   registerWindow: (windowElem: IWindowsLayerWindowProps) => void;
   unregisterWindow: (windowName: string) => void;
   updateWindow: (windowName: string, windowElem: IWindowsLayerWindowProps) => void;
+  toggleWindow: (windowName: string, fallbackWindow?: IWindowsLayerWindowProps) => void;
 }
 
 const WindowRegistryContext = createContext<IWindowRegistryContext | null>(null);
 
 function WindowRegistryBridge(props: { children: JSX.Element | JSX.Element[] }) {
-  const { addWindow, removeWindow, updateWindow } = useWindowsLayer();
+  const { addWindow, removeWindow, updateWindow, toggleWindow } = useWindowsLayer();
   const value = useMemo(
     () => ({
       registerWindow: addWindow,
       unregisterWindow: removeWindow,
       updateWindow,
+      toggleWindow,
     }),
-    [addWindow, removeWindow, updateWindow]
+    [addWindow, removeWindow, updateWindow, toggleWindow]
   );
   return <WindowRegistryContext.Provider value={value}>{props.children}</WindowRegistryContext.Provider>;
 }

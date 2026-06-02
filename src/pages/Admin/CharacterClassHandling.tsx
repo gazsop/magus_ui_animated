@@ -54,6 +54,10 @@ const createEmptySpell = (): Character.Spell.TSpellElements & {
 const normalizeClassForEditor = (classData: TClassWithMeta): TClassWithMeta => ({
   ...classData,
   description: classData.description || "",
+  maxCarriedWeapons: Math.max(
+    0,
+    Math.floor(Number(classData.maxCarriedWeapons || 0))
+  ),
   modifiers: {
     ...classData.modifiers,
     initialSecondarySkillPoints:
@@ -1073,6 +1077,23 @@ const ClassHandlingWindow = ({
               value: selectedClass.mainClass || ("0" as Character.MAIN_CLASSES),
             }}
           ></SelectUnq>
+          <InputUnq
+            id={`char-input-max-carried-weapons-${selectedClass.id}`}
+            label="Max carried weapons"
+            value={selectedClass.maxCarriedWeapons || 0}
+            onBlur={(e) => {
+              const target = e.target as HTMLInputElement;
+              const value = Math.max(
+                0,
+                toInt(target.value, selectedClass.maxCarriedWeapons || 0)
+              );
+              setSelectedClass((prev) => ({
+                ...prev,
+                maxCarriedWeapons: value,
+              }));
+            }}
+            type="number"
+          />
           <hr className="fancy" />
           <Resource />
           <hr className="fancy" />

@@ -30,12 +30,14 @@ interface IWindowsLayer {
     windowName: string,
     windowElem: IWindowsLayerWindowProps
   ) => void;
+  toggleWindow: (windowName: string, fallbackWindow?: IWindowsLayerWindowProps) => void;
 }
 
 const WindowsLayerContext = createContext<IWindowsLayer>({
   addWindow: () => {},
   removeWindow: () => {},
   updateWindow: () => {},
+  toggleWindow: () => {},
 });
 
 const WindowsCanvas = (props: {
@@ -116,6 +118,21 @@ export const WindowsLayerProvider = (props: {
     dispatch({ type: "update", name: windowName, window: windowElem });
   }, []);
 
+  const toggleWindow = useCallback((windowName: string, fallbackWindow?: IWindowsLayerWindowProps) => {
+    const current = state.windows.find((windowElem) => windowElem.name === windowName);
+    if (current) {
+      dispatch({ type: "toggle", name: windowName });
+      return;
+    }
+    if (!fallbackWindow) return;
+    dispatch({
+      type: "register",
+      window: fallbackWindow,
+      pinnedRecords: pinnedWindowRecords,
+      openOnRegister: true,
+    });
+  }, [pinnedWindowRecords, state.windows]);
+
   const minimizeWindow = useCallback((name: string) => {
     dispatch({ type: "minimize", name });
   }, []);
@@ -184,8 +201,8 @@ export const WindowsLayerProvider = (props: {
   }, [state.selectedWindow, visibleWindows]);
 
   const contextValue = useMemo(
-    () => ({ addWindow, removeWindow, updateWindow }),
-    [addWindow, removeWindow, updateWindow]
+    () => ({ addWindow, removeWindow, updateWindow, toggleWindow }),
+    [addWindow, removeWindow, updateWindow, toggleWindow]
   );
 
   const shortcuts = props.shortcuts ?? [];

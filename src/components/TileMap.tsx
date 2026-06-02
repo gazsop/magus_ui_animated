@@ -26,6 +26,7 @@ const MAP_WIDTH = ((MAX_BOUNDS.maxColumn + 1) * TILE_SIZE) / MAX_ZOOM_SCALE;
 const MAP_HEIGHT = ((MAX_BOUNDS.maxRow + 1) * TILE_SIZE) / MAX_ZOOM_SCALE;
 const EMPTY_TILE =
   "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+const MARKER_REFRESH_INTERVAL_MS = 10000;
 
 type TYnevLocation = {
   html: string;
@@ -319,23 +320,23 @@ export default function TileMap(props: {
     return marker;
   }, [sourceToLatLng]);
 
-  const loadMarkers = useCallback(async () => {
+  const loadMarkers = useCallback(async (silent = false) => {
     if (!user?.uid || !advId) {
       setMarkers([]);
       return;
     }
     try {
-      setMarkerStatus((current) => current || "Loading markers...");
+      if (!silent) setMarkerStatus((current) => current || "Loading markers...");
       const response = await ynevRequestRef.current<ServerApi.YnevRoutes.GetMarkersResponse, ServerApi.YnevRoutes.GetMarkersBody>({
         endPoint: "markers/get",
         body: { advId },
         errorMode: "quiet",
       });
       setMarkers(Array.isArray(response.data.markers) ? response.data.markers : []);
-      setMarkerStatus((current) => current === "Loading markers..." ? "" : current);
+      if (!silent) setMarkerStatus((current) => current === "Loading markers..." ? "" : current);
     } catch {
       setMarkers([]);
-      setMarkerStatus("Marker load failed.");
+      if (!silent) setMarkerStatus("Marker load failed.");
     }
   }, [advId, user?.uid]);
 
@@ -471,6 +472,22 @@ export default function TileMap(props: {
   useEffect(() => {
     void loadMarkers();
   }, [loadMarkers]);
+
+  useAdventureSseSubscription(
+    "connected",
+    advId,
+    () => {
+      void loadMarkers(true);
+    }
+  );
+
+  useEffect(() => {
+    if (!advId || !user?.uid) return;
+    const timer = window.setInterval(() => {
+      void loadMarkers(true);
+    }, MARKER_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [advId, loadMarkers, user?.uid]);
 
   useAdventureSseSubscription<ServerApi.YnevRoutes.MarkerDeletedEvent>(
     "ynev:markerDeleted",

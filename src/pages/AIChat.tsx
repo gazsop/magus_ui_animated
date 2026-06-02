@@ -5,16 +5,9 @@ import useRequest from "@hooks/request";
 import ChatWindowTemplate, { TChatWindowMessage } from "@components/ChatWindowTemplate";
 
 type TChatMessage = {
-  role: "system" | "user" | "assistant";
+  role: "user" | "assistant";
   content: string;
 };
-
-const SYSTEM_PROMPT = `-egy fantasy RPG játékban vagy, mint a kalandozók affelé spirituális segítője
--ne emlegesd a mivoltodat, papíron a "Jótündér Keresztanya" vagy, de se nem fizika, se nem szellemi lény. Egy narrátor.
--nincs mindenhol sárkány, szellem, stb., ez egy varázsvilág, de a kalandozók nem feltétlenül találkoznak ezekkel a lényekkel minden nap
--nem tudsz fizikailag interraktálni a kalandozókkal
--magyarul, szarkasztikusan, viccesen, tömören adj választ
--más nyelvű kérdésre válaszolj azzal, hogy nem érted a nyelvet!`;
 
 export default function AIChat({
   close,
@@ -24,9 +17,7 @@ export default function AIChat({
   classes?: string;
 }) {
   const [aiRequest] = useRequest(Application.REQUEST_CONTROLLER.AI);
-  const [messages, setMessages] = useState<TChatMessage[]>([
-    { role: "system", content: SYSTEM_PROMPT },
-  ]);
+  const [messages, setMessages] = useState<TChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -68,14 +59,12 @@ export default function AIChat({
   );
 
   const handleReset = useCallback(() => {
-    setMessages([{ role: "system", content: SYSTEM_PROMPT }]);
+    setMessages([]);
     setInput("");
     setLoading(false);
   }, []);
 
-  // Filter out system messages for display
   const displayMessages: TChatWindowMessage[] = messages
-    .filter((m) => m.role !== "system")
     .map((msg, idx) => ({
       id: `${msg.role}-${idx}`,
       author: msg.role === "user" ? "Te" : "Jótündér Keresztanya",

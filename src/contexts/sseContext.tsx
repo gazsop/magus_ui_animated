@@ -71,7 +71,8 @@ export function SseContextProvider(props: { children: JSX.Element | JSX.Element[
           },
           credentials: "include",
           body: JSON.stringify({
-            data: { scope, sync: syncSnapshotRef.current || undefined },
+            scope,
+            sync: syncSnapshotRef.current || undefined,
             requestTimestamp: Date.now(),
           }),
         });
@@ -110,7 +111,7 @@ export function SseContextProvider(props: { children: JSX.Element | JSX.Element[
           },
           credentials: "include",
           body: JSON.stringify({
-            data: { active },
+            active,
             requestTimestamp: Date.now(),
           }),
         });

@@ -345,6 +345,7 @@ function NewCharacter({
               <h3 className={`text-center text-l mt-1`}>Főkaszt</h3>
               <hr className={`fancy`} />
               <p>{selectedClass.mainClass}</p>
+              <p>Fegyverek száma: {Number(selectedClass.maxCarriedWeapons || 0)}</p>
               <h3 className={`text-center text-l mt-1`}>Alap statok</h3>
               <hr className={`fancy`} />
               <p>ÉP alap: {selectedClass.modifiers.ep}</p>
@@ -449,7 +450,6 @@ function NewCharacter({
 }
 
 export default NewCharacter;
-
 
 
 

@@ -255,7 +255,7 @@ export default function CharacterPage({
   const { user, descents, classes } = useDataContext();
   const { setSyncSnapshot } = useSseContext();
   const { setCombatBadge } = usePresenceUI();
-  const { addWindow } = useWindowsLayer();
+  const { addWindow, toggleWindow } = useWindowsLayer();
   const [religions, setReligions] = useState<Array<{ name: string; value: string }>>([]);
   const [personalities, setPersonalities] = useState<Array<{ name: string; value: string }>>([]);
   const [xpLevels, setXpLevels] = useState<number[]>(Character.LEVEL_CAPS);
@@ -569,28 +569,34 @@ export default function CharacterPage({
     registerWindowDescriptorRenderer("character-avatar-editor", renderAvatarEditorWindow);
 
     const onToggleSpells = () => {
-      addWindow(defineWindowRegistration({
-        id: "CHAR_SPELLS",
-        kind: "character-spells",
-        title: "Spells",
-        icon: "SP",
-        defaultOpen: true,
-        allowedPages: [PageState.CHAR_SHEET],
-        keepStateAcrossPages: true,
-        launcherVisible: false,
-      }));
+      toggleWindow(
+        "CHAR_SPELLS",
+        defineWindowRegistration({
+          id: "CHAR_SPELLS",
+          kind: "character-spells",
+          title: "Spells",
+          icon: "SP",
+          defaultOpen: false,
+          allowedPages: [PageState.CHAR_SHEET],
+          keepStateAcrossPages: true,
+          launcherVisible: false,
+        })
+      );
     };
     const onToggleSecondary = () => {
-      addWindow(defineWindowRegistration({
-        id: "CHAR_SECONDARY_SKILLS",
-        kind: "character-secondary-skills",
-        title: "Secondary Skills",
-        icon: "SS",
-        defaultOpen: true,
-        allowedPages: [PageState.CHAR_SHEET],
-        keepStateAcrossPages: true,
-        launcherVisible: false,
-      }));
+      toggleWindow(
+        "CHAR_SECONDARY_SKILLS",
+        defineWindowRegistration({
+          id: "CHAR_SECONDARY_SKILLS",
+          kind: "character-secondary-skills",
+          title: "Secondary Skills",
+          icon: "SS",
+          defaultOpen: false,
+          allowedPages: [PageState.CHAR_SHEET],
+          keepStateAcrossPages: true,
+          launcherVisible: false,
+        })
+      );
     };
     const onOpenAvatarEditor = () => {
       addWindow(defineWindowRegistration({
@@ -637,6 +643,7 @@ export default function CharacterPage({
     user?.uid,
     advId,
     characterRequest,
+    toggleWindow,
   ]);
   useEffect(() => {
     if (isMobileLayout) return;
