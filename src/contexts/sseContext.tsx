@@ -188,6 +188,8 @@ export function SseContextProvider(props: { children: JSX.Element | JSX.Element[
       "notes:lock",
       "private-notes:updated",
       "private-notes:lock",
+      "ynev:markerUpserted",
+      "ynev:markerDeleted",
       "character:updated",
       "character:levelup",
       "dev:runtime",

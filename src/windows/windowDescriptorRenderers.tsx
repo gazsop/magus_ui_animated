@@ -36,7 +36,11 @@ type TWindowDescriptorRendererComponentProps = {
   renderProps: TWindowRenderProps;
 };
 
-const descriptorRenderers: Record<string, TWindowDescriptorRenderer> = {};
+type TWindowDescriptorRendererComponent = (
+  props: TWindowDescriptorRendererComponentProps
+) => JSX.Element;
+
+const descriptorRenderers: Record<string, TWindowDescriptorRendererComponent> = {};
 
 const RndDescriptorWindow = ({
   descriptor,
@@ -72,14 +76,21 @@ export const registerWindowDescriptorRenderer = (
   kind: string,
   renderer: TWindowDescriptorRenderer
 ) => {
-  descriptorRenderers[kind] = renderer;
+  const RendererWrapper: TWindowDescriptorRendererComponent & {
+    sourceRenderer?: TWindowDescriptorRenderer;
+  } = ({ descriptor, renderProps }) => renderer(descriptor, renderProps);
+  RendererWrapper.sourceRenderer = renderer;
+  descriptorRenderers[kind] = RendererWrapper;
 };
 
 export const unregisterWindowDescriptorRenderer = (
   kind: string,
   renderer: TWindowDescriptorRenderer
 ) => {
-  if (descriptorRenderers[kind] === renderer) {
+  const registered = descriptorRenderers[kind] as
+    | (TWindowDescriptorRendererComponent & { sourceRenderer?: TWindowDescriptorRenderer })
+    | undefined;
+  if (registered?.sourceRenderer === renderer) {
     delete descriptorRenderers[kind];
   }
 };
@@ -245,8 +256,10 @@ export const WindowDescriptorRenderer = ({
   descriptor,
   renderProps,
 }: TWindowDescriptorRendererComponentProps) => {
-  const renderer = descriptorRenderers[descriptor.kind];
-  if (renderer) return renderer(descriptor, renderProps);
+  const Renderer = descriptorRenderers[descriptor.kind];
+  if (Renderer) {
+    return <Renderer descriptor={descriptor} renderProps={renderProps} />;
+  }
 
   return (
     <RndDescriptorWindow descriptor={descriptor} props={renderProps}>

@@ -1,12 +1,10 @@
-﻿import { render } from "preact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Application, ServerApi, User } from "@shared/contracts";
 import { useDataContext } from "@/contexts/dataContext";
 import useRequest from "@/hooks/request";
-import MapPinIcon from "@components/icons/general/MapPinIcon";
-import Trash2Icon from "@components/icons/general/Trash2Icon";
+import { useAdventureSseSubscription } from "@/hooks/sse";
 import { FlexRow } from "@components/Flex";
 
 const TILE_SIZE = 512;
@@ -66,23 +64,60 @@ const MARKER_STYLE: Record<TYnevMarkerKind, L.CircleMarkerOptions> = {
     fillOpacity: 0.85,
   },
 };
+const escapeSvgColor = (color: string) =>
+  /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#3b82f6";
+
+const createMapPinSvg = (fill: string, stroke: string) => `
+  <svg
+    class="map-pin drop-shadow"
+    fill="${escapeSvgColor(fill)}"
+    height="24"
+    stroke="${escapeSvgColor(stroke)}"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="2"
+    viewBox="0 0 24 24"
+    width="24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+    <circle cx="12" cy="10" r="3"></circle>
+  </svg>
+`;
+
+const createTrashSvg = () => `
+  <svg
+    class="trash-2 h-4 w-4"
+    fill="none"
+    height="24"
+    stroke="#ef4444"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="2"
+    viewBox="0 0 24 24"
+    width="24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <polyline points="3 6 5 6 21 6"></polyline>
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+    <line x1="10" x2="10" y1="11" y2="17"></line>
+    <line x1="14" x2="14" y1="11" y2="17"></line>
+  </svg>
+`;
+
 const createCityMarkerIcon = () => {
-  const icon = document.createElement("div");
-  render(<MapPinIcon className="drop-shadow" fill="#fde68a" stroke="#d97706" />, icon);
   return L.divIcon({
     className: "",
-    html: icon,
+    html: createMapPinSvg("#fde68a", "#d97706"),
     iconSize: [24, 24],
     iconAnchor: [12, 24],
     popupAnchor: [0, -24],
   });
 };
 const createPinMarkerIcon = (color: string) => {
-  const icon = document.createElement("div");
-  render(<MapPinIcon className="drop-shadow" fill={color} stroke="#ffffff" />, icon);
   return L.divIcon({
     className: "",
-    html: icon,
+    html: createMapPinSvg(color, "#ffffff"),
     iconSize: [24, 24],
     iconAnchor: [12, 24],
     popupAnchor: [0, -24],
@@ -226,8 +261,7 @@ export default function TileMap(props: {
         button.style.justifyContent = "center";
         button.style.color = "#ef4444";
         button.style.cursor = "pointer";
-        render(<Trash2Icon className="h-4 w-4" />, button);
-        button.querySelector("svg")?.setAttribute("stroke", "#ef4444");
+        button.innerHTML = createTrashSvg();
         L.DomEvent.on(button, "click", L.DomEvent.stopPropagation)
           .on(button, "click", L.DomEvent.preventDefault)
           .on(button, "click", onDelete);
@@ -437,6 +471,31 @@ export default function TileMap(props: {
   useEffect(() => {
     void loadMarkers();
   }, [loadMarkers]);
+
+  useAdventureSseSubscription<ServerApi.YnevRoutes.MarkerDeletedEvent>(
+    "ynev:markerDeleted",
+    advId,
+    (payload) => {
+      if (payload.scope !== "all" || !payload.id) return;
+      setMarkers((current) => current.filter((marker) => marker.id !== payload.id));
+    }
+  );
+
+  useAdventureSseSubscription<ServerApi.YnevRoutes.MarkerUpsertedEvent>(
+    "ynev:markerUpserted",
+    advId,
+    (payload) => {
+      const marker = payload.marker;
+      if (!marker?.id || marker.scope !== "all" || marker.hidden) return;
+      setMarkers((current) => {
+        const index = current.findIndex((entry) => entry.id === marker.id);
+        if (index < 0) return [...current, marker];
+        const next = [...current];
+        next[index] = marker;
+        return next;
+      });
+    }
+  );
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
