@@ -31,6 +31,11 @@ export type TWindowDescriptorRenderer = (
   props: TWindowRenderProps
 ) => JSX.Element;
 
+type TWindowDescriptorRendererComponentProps = {
+  descriptor: TWindowDescriptor;
+  renderProps: TWindowRenderProps;
+};
+
 const descriptorRenderers: Record<string, TWindowDescriptorRenderer> = {};
 
 const RndDescriptorWindow = ({
@@ -236,25 +241,30 @@ registerWindowDescriptorRenderer("admin-adventure-character-data", (descriptor, 
   />
 ));
 
-export const renderWindowDescriptor = (
-  descriptor: TWindowDescriptor,
-  props: TWindowRenderProps
-) => {
+export const WindowDescriptorRenderer = ({
+  descriptor,
+  renderProps,
+}: TWindowDescriptorRendererComponentProps) => {
   const renderer = descriptorRenderers[descriptor.kind];
-  if (renderer) return renderer(descriptor, props);
+  if (renderer) return renderer(descriptor, renderProps);
 
   return (
-    <RndDescriptorWindow descriptor={descriptor} props={props}>
+    <RndDescriptorWindow descriptor={descriptor} props={renderProps}>
       <FlexCol className="p-3 gap-2 min-w-[260px] max-w-[360px]">
         <p className="font-semibold">{descriptor.title}</p>
         <p className="text-sm">
           This window descriptor is registered, but no renderer exists for
           kind `{descriptor.kind}` yet.
         </p>
-        <button className="fancy-container px-2 py-1 self-end" onClick={props.close}>
+        <button className="fancy-container px-2 py-1 self-end" onClick={renderProps.close}>
           Close
         </button>
       </FlexCol>
     </RndDescriptorWindow>
   );
 };
+
+export const renderWindowDescriptor = (
+  descriptor: TWindowDescriptor,
+  props: TWindowRenderProps
+) => <WindowDescriptorRenderer descriptor={descriptor} renderProps={props} />;

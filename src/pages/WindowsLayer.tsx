@@ -2,7 +2,7 @@ import { createContext, useContext, JSX, useMemo, useCallback, useEffect, useRed
 import { FlexCol } from "@components/Flex";
 import { RndWindowControlsContext } from "@components/RndContainer";
 import { PageState } from "@/app/navigation";
-import { renderWindowDescriptor } from "@/windows/windowDescriptorRenderers";
+import { WindowDescriptorRenderer } from "@/windows/windowDescriptorRenderers";
 import {
   IOnlineUserBadge,
   IWindowsLayerShortcut,
@@ -61,13 +61,16 @@ const WindowsCanvas = (props: {
                 zIndex,
               }}
             >
-              {renderWindowDescriptor(windowElem.descriptor, {
-                close: () => removeWindow(windowElem.name),
-                minimize: () => minimizeWindow(windowElem.name),
-                selectWindow: () => selectWindow(windowElem.name),
-                zIndex,
-                classes: isSelected ? "z-50" : "z-10",
-              })}
+              <WindowDescriptorRenderer
+                descriptor={windowElem.descriptor}
+                renderProps={{
+                  close: () => removeWindow(windowElem.name),
+                  minimize: () => minimizeWindow(windowElem.name),
+                  selectWindow: () => selectWindow(windowElem.name),
+                  zIndex,
+                  classes: isSelected ? "z-50" : "z-10",
+                }}
+              />
             </RndWindowControlsContext.Provider>
           </div>
         );
