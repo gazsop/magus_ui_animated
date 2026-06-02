@@ -128,6 +128,9 @@ export default function ItemHandlingWindow({
   const autoStorageSlotAmount = String(
     Math.max(1, toNum(storageSizeX, 1)) * Math.max(1, toNum(storageSizeY, 1))
   );
+  const isBagOrSatchelEquipable =
+    equipable === Character.Item.ITEM_TYPE_EQUIPPABLE.BAG ||
+    equipable === Character.Item.ITEM_TYPE_EQUIPPABLE.SATCHEL;
 
   const addItem = () => {
     if (!name.trim()) return;
@@ -147,12 +150,11 @@ export default function ItemHandlingWindow({
           : Math.max(1, Number.isFinite(toNum(maxStack, 1)) ? toNum(maxStack, 1) : 1),
       img: img.trim() || undefined,
       imgMeta: imgMeta,
-      consumable,
-      createsInventorySpace,
+      consumable: isBagOrSatchelEquipable ? false : consumable,
+      createsInventorySpace: isBagOrSatchelEquipable || createsInventorySpace,
       equipable: equipable ? equipable : null,
       storage:
-        equipable === Character.Item.ITEM_TYPE_EQUIPPABLE.STORAGE ||
-        createsInventorySpace
+        isBagOrSatchelEquipable || createsInventorySpace
           ? {
               sizeX: Math.max(1, toNum(storageSizeX, 1)),
               sizeY: Math.max(1, toNum(storageSizeY, 1)),
@@ -353,7 +355,8 @@ export default function ItemHandlingWindow({
       if (filterBy === "equippable" && item.equipable === null) return false;
       if (
         filterBy === "storage" &&
-        item.equipable !== Character.Item.ITEM_TYPE_EQUIPPABLE.STORAGE &&
+        item.equipable !== Character.Item.ITEM_TYPE_EQUIPPABLE.BAG &&
+        item.equipable !== Character.Item.ITEM_TYPE_EQUIPPABLE.SATCHEL &&
         item.createsInventorySpace !== true
       ) return false;
       if (!s) return true;

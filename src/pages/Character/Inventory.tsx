@@ -1,24 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { createPortal, JSX } from "preact/compat";
 import { Character, ServerApi } from "@shared/contracts";
-import { copperToInventoryMoney, inventoryMoneyToCopper } from "@shared/game";
+import {
+  copperToInventoryMoney,
+  DEFAULT_STORAGE_ID,
+  getDefaultStorageColumns,
+  getDefaultStorageRows,
+  getDefaultStorageSlotAmount,
+  getItemGridSize,
+  getPlacementForStorageIndex,
+  indexToSlot,
+  inventoryMoneyToCopper,
+  isBagOrSatchel,
+  isWeaponOrShield,
+  slotToIndex,
+} from "@shared/game";
 import { createEmptyHm } from "@/utils/hm";
 import { getEmptySlotIcon, getItemDefaultIcon } from "@/utils/itemIcons";
 import { FlexCol, FlexRow } from "@components/Flex";
 import ItemHoverCard from "@components/ItemHoverCard";
-import {
-  MoneyAddInput,
-  MoneyDisplay,
-} from "@components/Money";
-import {
-  DEFAULT_STORAGE_ID,
-  DEFAULT_STORAGE_SIZE,
-  DEFAULT_STORAGE_SLOT_AMOUNT,
-  getItemGridSize,
-  getPlacementForStorageIndex,
-  indexToSlot,
-  slotToIndex,
-} from "@shared/game";
+import { MoneyAddInput, MoneyDisplay } from "@components/Money";
 import StorageGrid from "@pages/Character/components/StorageGrid";
 
 type DragSource = "storage" | "equipment";
@@ -66,10 +67,8 @@ const absPositions = [
   ["trinket", "2%", "75%"],
   ["offHand", "50%", "68%"],
   ["bracer", "35%", "69%"],
-  ["bag1", "70%", "5%"],
-  ["bag2", "70%", "22%"],
-  ["bag3", "70%", "39%"],
-  ["bag4", "70%", "56%"],
+  ["bag", "72%", "8%"],
+  ["satchel", "72%", "25%"],
 ] as const;
 
 const isItemAllowedInSlot = (item: Character.Item.TItem, slotName: string): boolean => {
@@ -90,10 +89,8 @@ const isItemAllowedInSlot = (item: Character.Item.TItem, slotName: string): bool
     case "shoulder": return eq === Character.Item.ITEM_TYPE_EQUIPPABLE.SHOULDER;
     case "bracer": return eq === Character.Item.ITEM_TYPE_EQUIPPABLE.BRACER;
     case "hands": return eq === Character.Item.ITEM_TYPE_EQUIPPABLE.GLOVES;
-    case "bag1":
-    case "bag2":
-    case "bag3":
-    case "bag4": return eq === Character.Item.ITEM_TYPE_EQUIPPABLE.STORAGE;
+    case "bag": return eq === Character.Item.ITEM_TYPE_EQUIPPABLE.BAG;
+    case "satchel": return eq === Character.Item.ITEM_TYPE_EQUIPPABLE.SATCHEL;
     default: return false;
   }
 };
@@ -114,7 +111,7 @@ const makeEntry = (
   cell: NonNullable<TCell>,
   placement: Character.Item.TItemPlacement
 ): Character.Item.TBackpack["items"][number] => ({
-  amount: Math.max(1, Number(cell.amount || 1)),
+  amount: cell.item.equipable ? 1 : Math.max(1, Number(cell.amount || 1)),
   item: cell.item,
   placement,
   ...(cell.additionalAuras ? { additionalAuras: cell.additionalAuras } : {}),
@@ -125,9 +122,10 @@ const getOccupiedIndexes = (
   item: Character.Item.TItem,
   topLeftIndex: number,
   width: number,
-  totalSlots: number
+  totalSlots: number,
+  storageId?: string
 ) => {
-  const size = getItemGridSize(item);
+  const size = getItemGridSize(item, storageId);
   const start = indexToSlot(topLeftIndex, width);
   const rows = Math.ceil(totalSlots / width);
   if (start.placeX + size.x > width || start.placeY + size.y > rows) return null;
@@ -142,11 +140,11 @@ const getOccupiedIndexes = (
   return indexes;
 };
 
-const getOccupationMap = (cells: TCell[], width: number) => {
+const getOccupationMap = (cells: TCell[], width: number, storageId?: string) => {
   const occupation = new Map<number, number>();
   cells.forEach((cell, index) => {
     if (!cell) return;
-    const indexes = getOccupiedIndexes(cell.item, index, width, cells.length);
+    const indexes = getOccupiedIndexes(cell.item, index, width, cells.length, storageId);
     if (!indexes) return;
     indexes.forEach((idx) => occupation.set(idx, index));
   });
@@ -158,11 +156,14 @@ const canPlaceCell = (
   width: number,
   cell: NonNullable<TCell>,
   targetIndex: number,
+  storageId: string,
   ignoreIndex?: number
 ) => {
-  const indexes = getOccupiedIndexes(cell.item, targetIndex, width, cells.length);
+  if (storageId === DEFAULT_STORAGE_ID && !isWeaponOrShield(cell.item)) return false;
+  if (storageId !== DEFAULT_STORAGE_ID && isBagOrSatchel(cell.item)) return false;
+  const indexes = getOccupiedIndexes(cell.item, targetIndex, width, cells.length, storageId);
   if (!indexes) return false;
-  const occupation = getOccupationMap(cells, width);
+  const occupation = getOccupationMap(cells, width, storageId);
   return indexes.every((idx) => {
     const owner = occupation.get(idx);
     return owner === undefined || owner === ignoreIndex;
@@ -177,18 +178,19 @@ const withPlacement = (
   placement,
 });
 
-export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInventoryChange, onDropItem, onSellItem, onUseItem, onEquipItem }: { inventory?: Character.Item.TInventory; vendorMode?: boolean; onMoneyChange?: (money: Character.Item.TMoney) => Promise<void> | void; onInventoryChange?: (inventory: Character.Item.TInventory) => Promise<void> | void; onDropItem?: (source: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; onSellItem?: (source: ServerApi.CharacterRoutes.ItemActionSource, requestedPriceCopper: number) => Promise<void> | void; onUseItem?: (source: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; onEquipItem?: (source: ServerApi.CharacterRoutes.ItemActionSource, targetSlotId?: string, target?: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; }) {
+export function useInventoryPanels({ inventory, vendorMode, defaultCapacity, onMoneyChange, onInventoryChange, onDropItem, onSellItem, onUseItem, onEquipItem }: { inventory?: Character.Item.TInventory; vendorMode?: boolean; defaultCapacity?: number; onMoneyChange?: (money: Character.Item.TMoney) => Promise<void> | void; onInventoryChange?: (inventory: Character.Item.TInventory) => Promise<void> | void; onDropItem?: (source: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; onSellItem?: (source: ServerApi.CharacterRoutes.ItemActionSource, requestedPriceCopper: number) => Promise<void> | void; onUseItem?: (source: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; onEquipItem?: (source: ServerApi.CharacterRoutes.ItemActionSource, targetSlotId?: string, target?: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; }) {
   const defaultMoney: Character.Item.TMoney = [{ name: Character.Item.MONEY.GOLD, amount: 0 },{ name: Character.Item.MONEY.SILVER, amount: 0 },{ name: Character.Item.MONEY.COPPER, amount: 0 }];
+  const defaultSlots = getDefaultStorageSlotAmount(defaultCapacity);
+  const defaultColumns = getDefaultStorageColumns(defaultCapacity);
+  const defaultRows = getDefaultStorageRows(defaultCapacity);
   const [draggedItem, setDraggedItem] = useState<DragItem | null>(null);
   const [itemMenu, setItemMenu] = useState<TItemMenuState>(null);
   const [hoveredItem, setHoveredItem] = useState<Character.Item.TItem | null>(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
-  const [activeStorageId, setActiveStorageId] = useState<string>(DEFAULT_STORAGE_ID);
-  const [defaultCells, setDefaultCells] = useState<TCell[]>(Array(DEFAULT_STORAGE_SLOT_AMOUNT).fill(null));
+  const [defaultCells, setDefaultCells] = useState<TCell[]>(Array(defaultSlots).fill(null));
   const [storageCells, setStorageCells] = useState<Record<string, TCell[]>>({});
   const [equippedItems, setEquippedItems] = useState<TCell[]>(Array(absPositions.length).fill(null));
   const [equippedBags, setEquippedBags] = useState<Array<{ item: Character.Item.TItem; bag: Character.Item.TBagInstance }>>([]);
-  const [storedBags, setStoredBags] = useState<Array<{ storageId: string; item: Character.Item.TItem; bag: Character.Item.TBagInstance }>>([]);
   const [isMoneyModalOpen, setIsMoneyModalOpen] = useState(false);
   const [moneyInputCopper, setMoneyInputCopper] = useState(0);
   const [sellTarget, setSellTarget] = useState<TItemMenuState>(null);
@@ -209,13 +211,12 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
   const scheduleHover = (item: Character.Item.TItem, x: number, y: number) => { clearHoverTimer(); hoverTimerRef.current = window.setTimeout(() => { setHoveredItem(item); setHoverPos({ x, y }); }, 900); };
 
   useEffect(() => {
-    const nextDefault = Array(DEFAULT_STORAGE_SLOT_AMOUNT).fill(null) as TCell[];
+    const nextDefault = Array(defaultSlots).fill(null) as TCell[];
     const nextStorage: Record<string, TCell[]> = {};
     const nextEquip = Array(absPositions.length).fill(null) as TCell[];
     const nextEqBags: Array<{ item: Character.Item.TItem; bag: Character.Item.TBagInstance }> = [];
-    const nextStoredBags: Array<{ storageId: string; item: Character.Item.TItem; bag: Character.Item.TBagInstance }> = [];
 
-    const sourceBackpacks = inventory?.backpacks?.length ? inventory.backpacks : [{ id: DEFAULT_STORAGE_ID, isDefault: true, type: "basic", size: { sizeX: DEFAULT_STORAGE_SIZE.x, sizeY: DEFAULT_STORAGE_SIZE.y, weight: 0, slotAmount: DEFAULT_STORAGE_SLOT_AMOUNT }, items: Array.from({ length: DEFAULT_STORAGE_SLOT_AMOUNT }, (_, i) => i < 4 ? { amount: 1, item: createMockItem(i) } : null).filter(Boolean) as Character.Item.TBackpack["items"] } as Character.Item.TBackpack];
+    const sourceBackpacks = inventory?.backpacks?.length ? inventory.backpacks : [{ id: DEFAULT_STORAGE_ID, isDefault: true, type: "basic", size: { sizeX: defaultColumns, sizeY: defaultRows, weight: 0, slotAmount: defaultSlots }, items: Array.from({ length: defaultSlots }, (_, i) => i < 0 ? { amount: 1, item: createMockItem(i) } : null).filter(Boolean) as Character.Item.TBackpack["items"] } as Character.Item.TBackpack];
     sourceBackpacks.forEach((bp, bpIdx) => {
       const sid = String(bp.id || (bp.isDefault ? DEFAULT_STORAGE_ID : `storage_${bpIdx + 1}`));
       if (!bp.isDefault && sid !== DEFAULT_STORAGE_ID) {
@@ -223,24 +224,21 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
         nextStorage[sid] = Array(slots).fill(null);
       }
       (bp.items || []).forEach((entry, entryIdx) => {
-        const pos = entry.placement?.slot || { placeX: entryIdx % Math.max(1, Number(bp.size?.sizeX || 1)), placeY: Math.floor(entryIdx / Math.max(1, Number(bp.size?.sizeX || 1))) };
-        const width = Math.max(1, Number(bp.size?.sizeX || (bp.isDefault ? DEFAULT_STORAGE_SIZE.x : 1)));
+        const width = sid === DEFAULT_STORAGE_ID ? defaultColumns : Math.max(1, Number(bp.size?.sizeX || 1));
+        const pos = entry.placement?.slot || { placeX: entryIdx % width, placeY: Math.floor(entryIdx / width) };
         const idx = slotToIndex(pos, width);
         const cell = makeCell(entry);
         if (entry.placement?.equippedSlotId) {
           const slotIdx = absPositions.findIndex((x) => x[0] === entry.placement?.equippedSlotId);
           if (slotIdx >= 0) nextEquip[slotIdx] = cell;
-        } else if (bp.isDefault || sid === DEFAULT_STORAGE_ID) {
-          if (idx >= 0 && idx < nextDefault.length && canPlaceCell(nextDefault, width, cell, idx)) nextDefault[idx] = cell;
+        } else if (sid === DEFAULT_STORAGE_ID) {
+          if (idx >= 0 && idx < nextDefault.length && canPlaceCell(nextDefault, width, cell, idx, DEFAULT_STORAGE_ID)) nextDefault[idx] = cell;
         } else {
           const dest = nextStorage[sid] || [];
-          if (idx >= 0 && idx < dest.length && canPlaceCell(dest, width, cell, idx)) dest[idx] = cell;
+          if (idx >= 0 && idx < dest.length && canPlaceCell(dest, width, cell, idx, sid)) dest[idx] = cell;
           nextStorage[sid] = dest;
         }
-        if (entry.bag) {
-          if (entry.bag.state === "equipped") nextEqBags.push({ item: entry.item, bag: entry.bag });
-          else nextStoredBags.push({ storageId: sid, item: entry.item, bag: entry.bag });
-        }
+        if (entry.bag && entry.bag.state === "equipped") nextEqBags.push({ item: entry.item, bag: entry.bag });
       });
     });
 
@@ -248,12 +246,12 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
     setStorageCells(nextStorage);
     setEquippedItems(nextEquip);
     setEquippedBags(nextEqBags);
-    setStoredBags(nextStoredBags);
-    if (!nextStorage[activeStorageId] && Object.keys(nextStorage).length > 0) setActiveStorageId(Object.keys(nextStorage)[0]);
-  }, [inventory]);
+  }, [defaultColumns, defaultRows, defaultSlots, inventory]);
+
+  const nonDefaultStorages = allNonDefaultStorages;
 
   const emitInventoryChange = (nextDefault: TCell[], nextStorage: Record<string, TCell[]>, nextEquip: TCell[]) => {
-    const backpacks: Character.Item.TBackpack[] = [{ id: DEFAULT_STORAGE_ID, label: "Default", isDefault: true, type: "basic", size: { sizeX: DEFAULT_STORAGE_SIZE.x, sizeY: DEFAULT_STORAGE_SIZE.y, weight: 0, slotAmount: DEFAULT_STORAGE_SLOT_AMOUNT }, items: nextDefault.map((cell, idx) => cell ? makeEntry(cell, getPlacementForStorageIndex(DEFAULT_STORAGE_ID, idx, DEFAULT_STORAGE_SIZE.x)) : null).filter(Boolean) as Character.Item.TBackpack["items"] }];
+    const backpacks: Character.Item.TBackpack[] = [{ id: DEFAULT_STORAGE_ID, label: "Default", isDefault: true, type: "basic", size: { sizeX: defaultColumns, sizeY: defaultRows, weight: 0, slotAmount: defaultSlots }, items: nextDefault.map((cell, idx) => cell ? makeEntry(cell, getPlacementForStorageIndex(DEFAULT_STORAGE_ID, idx, defaultColumns)) : null).filter(Boolean) as Character.Item.TBackpack["items"] }];
     nonDefaultStorages.forEach((bp, i) => {
       const sid = String(bp.id || `storage_${i + 1}`);
       const sx = Math.max(1, Number(bp.size?.sizeX || 1));
@@ -262,7 +260,7 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
     });
     nextEquip.forEach((cell, idx) => {
       if (!cell) return;
-      const rememberedPlacement = cell.placement || getPlacementForStorageIndex(DEFAULT_STORAGE_ID, idx, DEFAULT_STORAGE_SIZE.x);
+      const rememberedPlacement = cell.placement || getPlacementForStorageIndex(DEFAULT_STORAGE_ID, idx, defaultColumns);
       backpacks[0].items.push(makeEntry(cell, { ...rememberedPlacement, equippedSlotId: absPositions[idx][0] }));
     });
     void onInventoryChange?.({ backpacks, money: inventory?.money || defaultMoney });
@@ -286,7 +284,7 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
     storageId === DEFAULT_STORAGE_ID ? defaultCells : storageCells[storageId] || [];
   const getStorageWidth = (storageId: string) =>
     storageId === DEFAULT_STORAGE_ID
-      ? DEFAULT_STORAGE_SIZE.x
+      ? defaultColumns
       : Math.max(
           1,
           Number(
@@ -313,18 +311,19 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
           : [...getCellsForStorage(sourceStorageId)];
       const moved = srcCells[draggedItem.index];
       if (!moved) return;
-      const occupation = getOccupationMap(cells, targetWidth);
+      const occupation = getOccupationMap(cells, targetWidth, targetStorageId);
       const targetOwner = occupation.get(targetIndex);
       const targetCell = targetOwner !== undefined ? cells[targetOwner] : null;
       const sameName = targetCell && targetCell.item.name === moved.item.name;
-      const maxStack = moved.item.equipable ? 1 : Math.max(1, Number(moved.item.maxStack || 1));
+      const maxStack = moved.item.equipable || isBagOrSatchel(moved.item) ? 1 : Math.max(1, Number(moved.item.maxStack || 1));
       if (
         sameName &&
         targetCell &&
         targetOwner !== undefined &&
         targetOwner !== draggedItem.index &&
-        getItemGridSize(moved.item).x === 1 &&
-        getItemGridSize(moved.item).y === 1
+        maxStack > 1 &&
+        getItemGridSize(moved.item, targetStorageId).x === 1 &&
+        getItemGridSize(moved.item, targetStorageId).y === 1
       ) {
         const merged = targetCell.amount + moved.amount;
         const kept = Math.min(maxStack, merged);
@@ -333,7 +332,7 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
         srcCells[draggedItem.index] = overflow > 0 ? { ...moved, amount: overflow } : null;
       } else {
         srcCells[draggedItem.index] = null;
-        if (!canPlaceCell(cells, targetWidth, moved, targetIndex, sourceStorageId === targetStorageId ? draggedItem.index : undefined)) {
+        if (!canPlaceCell(cells, targetWidth, moved, targetIndex, targetStorageId, sourceStorageId === targetStorageId ? draggedItem.index : undefined)) {
           setDraggedItem(null);
           return;
         }
@@ -360,26 +359,24 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
       );
       setDraggedItem(null);
       return;
-    } else {
-      if (!canPlaceCell(cells, targetWidth, draggedItem.cell, targetIndex)) {
-        setDraggedItem(null);
-        return;
-      }
-      void onEquipItem?.(
-        {
-          from: "equipment",
-          index: draggedItem.index,
-        },
-        undefined,
-        {
-          from: "storage",
-          index: targetIndex,
-          storageId: targetStorageId,
-        }
-      );
+    }
+    if (!canPlaceCell(cells, targetWidth, draggedItem.cell, targetIndex, targetStorageId)) {
       setDraggedItem(null);
       return;
     }
+    void onEquipItem?.(
+      {
+        from: "equipment",
+        index: draggedItem.index,
+      },
+      undefined,
+      {
+        from: "storage",
+        index: targetIndex,
+        storageId: targetStorageId,
+      }
+    );
+    setDraggedItem(null);
   };
 
   const handleTargetDrop = (targetIndex: number) => (e: DragEvent) => {
@@ -439,7 +436,7 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
   };
 
   const handleUseAction = async () => {
-    if (!itemMenu || itemMenu.item.consumable !== true) return;
+    if (!itemMenu || itemMenu.item.consumable !== true || isBagOrSatchel(itemMenu.item)) return;
     await onUseItem?.({
       from: itemMenu.from,
       index: itemMenu.index,
@@ -468,39 +465,21 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
     setSellTarget(null);
   };
 
-  const equipmentPanel = <FlexRow className="w-full min-w-0 shrink-0 justify-center items-start"><div className="relative w-full border p-1 fancy-container bg-center bg-contain bg-no-repeat" style={{ aspectRatio: "670 / 887", backgroundImage: "url('/imgs/character_3.svg')" }}>{equippedItems.map((cell, index) => <div key={`eq-${index}`} className="aspect-square absolute border fancy-container text-center select-none origin-top-left" style={{ top: absPositions[index][1], left: absPositions[index][2], width: "18%" }} onDragOver={handleDragOver} onDrop={handleTargetDrop(index)} draggable={!!cell} onDragStart={cell ? handleDragStart(cell.item, "equipment", index) : undefined} onMouseEnter={cell ? (e) => scheduleHover(cell.item, e.clientX, e.clientY) : undefined} onMouseLeave={cell ? hideHover : undefined} onContextMenu={cell ? (e) => { e.preventDefault(); e.stopPropagation(); hideHover(); setItemMenu({ x: e.clientX, y: e.clientY, from: "equipment", index, item: cell.item }); } : undefined}>{cell ? <FlexCol className="items-center text-[9px]">{renderItemVisual(cell.item)}<span className="truncate">{cell.item.name}</span>{cell.amount > 1 ? <span>x{cell.amount}</span> : null}</FlexCol> : <FlexRow className="w-full h-full items-center justify-center">{getEmptySlotIcon(absPositions[index][0])}</FlexRow>}</div>)}</div></FlexRow>;
+  const equipmentPanel = <FlexRow className="w-full min-w-0 shrink-0 justify-center items-start"><div className="relative w-full border p-1 fancy-container bg-center bg-contain bg-no-repeat" style={{ aspectRatio: "670 / 887", backgroundImage: "url('/imgs/character_3.svg')" }}>{equippedItems.map((cell, index) => <div key={`eq-${index}`} className={`aspect-square absolute border fancy-container text-center select-none origin-top-left ${absPositions[index][0] === "bag" || absPositions[index][0] === "satchel" ? "w-[13%]" : ""}`} style={{ top: absPositions[index][1], left: absPositions[index][2], width: absPositions[index][0] === "bag" || absPositions[index][0] === "satchel" ? "13%" : "18%" }} onDragOver={handleDragOver} onDrop={handleTargetDrop(index)} draggable={!!cell} onDragStart={cell ? handleDragStart(cell.item, "equipment", index) : undefined} onMouseEnter={cell ? (e) => scheduleHover(cell.item, e.clientX, e.clientY) : undefined} onMouseLeave={cell ? hideHover : undefined} onContextMenu={cell ? (e) => { e.preventDefault(); e.stopPropagation(); hideHover(); setItemMenu({ x: e.clientX, y: e.clientY, from: "equipment", index, item: cell.item }); } : undefined}>{cell ? <FlexCol className="items-center text-[9px]">{renderItemVisual(cell.item)}<span className="truncate">{cell.item.name}</span>{cell.amount > 1 ? <span>x{cell.amount}</span> : null}</FlexCol> : <FlexRow className="w-full h-full items-center justify-center">{getEmptySlotIcon(absPositions[index][0])}</FlexRow>}</div>)}</div></FlexRow>;
 
-  const defaultStoragePanel = <FlexCol className="w-full h-full min-w-0 min-h-0 p-1 fancy-container"><p className="text-xs font-semibold mb-1">Default Storage (4x2)</p><StorageGrid gridClassName="grid grid-cols-4 grid-rows-2 gap-1" columns={DEFAULT_STORAGE_SIZE.x} cells={defaultCells.slice(0, DEFAULT_STORAGE_SLOT_AMOUNT)} renderItemVisual={renderItemVisual} onDragOver={handleDragOver} onDropAt={(index) => handleStorageDrop(DEFAULT_STORAGE_ID, index)} onDragStartAt={(item, index) => handleDragStart(item, "storage", index, DEFAULT_STORAGE_ID)} onMouseEnterItem={(item, e) => scheduleHover(item, e.clientX, e.clientY)} onMouseLeaveItem={hideHover} onContextMenuItem={(item, index, e) => { hideHover(); setItemMenu({ x: e.clientX, y: e.clientY, from: "storage", index, item, storageId: DEFAULT_STORAGE_ID }); }} /></FlexCol>;
+  const moneyFooter = <FlexRow className="w-full min-w-0 mt-1 gap-1 justify-between fancy-container p-0.5 cursor-pointer" onClick={() => setIsMoneyModalOpen(true)}><MoneyDisplay copper={inventoryMoneyToCopper(inventory?.money || defaultMoney)} className="text-xs" /></FlexRow>;
+  const defaultStoragePanel = <FlexCol className="w-full h-full min-w-0 min-h-0 p-1 fancy-container"><p className="text-xs font-semibold mb-1">Default ({defaultSlots} weapon/shield)</p><StorageGrid storageId={DEFAULT_STORAGE_ID} gridClassName="grid gap-1" gridStyle={{ gridTemplateColumns: `repeat(${defaultColumns}, minmax(0, 1fr))` }} columns={defaultColumns} cells={defaultCells.slice(0, defaultSlots)} renderItemVisual={renderItemVisual} onDragOver={handleDragOver} onDropAt={(index) => handleStorageDrop(DEFAULT_STORAGE_ID, index)} onDragStartAt={(item, index) => handleDragStart(item, "storage", index, DEFAULT_STORAGE_ID)} onMouseEnterItem={(item, e) => scheduleHover(item, e.clientX, e.clientY)} onMouseLeaveItem={hideHover} onContextMenuItem={(item, index, e) => { hideHover(); setItemMenu({ x: e.clientX, y: e.clientY, from: "storage", index, item, storageId: DEFAULT_STORAGE_ID }); }} />{moneyFooter}</FlexCol>;
 
-  const hasAnyBagInstance = equippedBags.length > 0 || storedBags.length > 0;
-  const nonDefaultStorages = hasAnyBagInstance ? allNonDefaultStorages : [];
   const bagOwnerById = new Map<string, Character.Item.TItem>();
   equippedBags.forEach((entry) => bagOwnerById.set(entry.bag.id, entry.item));
-  storedBags.forEach((entry) => bagOwnerById.set(entry.bag.id, entry.item));
-  const separateStorages = nonDefaultStorages.filter(
-    (bp) => bagOwnerById.get(String(bp.id || ""))?.createsInventorySpace === true
-  );
-  const tabbedBagStorages = nonDefaultStorages.filter(
-    (bp) => bagOwnerById.get(String(bp.id || ""))?.createsInventorySpace !== true
-  );
-  const activeTabbedStorage = tabbedBagStorages.some(
-    (bp, idx) => String(bp.id || `storage_${idx + 1}`) === activeStorageId
-  )
-    ? activeStorageId
-    : String(tabbedBagStorages[0]?.id || "storage_1");
-  const activeTabbedBackpack =
-    tabbedBagStorages.find(
-      (bp, idx) => String(bp.id || `storage_${idx + 1}`) === activeTabbedStorage
-    ) || tabbedBagStorages[0];
-  const activeTabbedColumns = Math.max(1, Number(activeTabbedBackpack?.size?.sizeX || 4));
-  const activeTabbedCells = activeTabbedBackpack
-    ? getCellsForStorage(activeTabbedStorage)
-    : [];
-  const bagStoragePanels: TBagStoragePanel[] = separateStorages.map((bp, idx) => {
+  const bagStoragePanels: TBagStoragePanel[] = nonDefaultStorages
+    .filter((bp) => bagOwnerById.has(String(bp.id || "")))
+    .map((bp, idx) => {
     const sid = String(bp.id || `storage_${idx + 1}`);
     const columns = Math.max(1, Number(bp.size?.sizeX || 4));
     const cells = getCellsForStorage(sid);
-    const label = bp.label || `Storage ${idx + 1}`;
+    const owner = bagOwnerById.get(sid);
+    const label = bp.label || owner?.name || `Storage ${idx + 1}`;
     return {
       storageId: sid,
       label,
@@ -511,6 +490,7 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
           {Math.max(1, Number(bp.size?.sizeY || Math.ceil(cells.length / columns)))})
         </p>
         <StorageGrid
+          storageId={sid}
           gridClassName="grid gap-1"
           gridStyle={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
           columns={columns}
@@ -532,7 +512,7 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
       ),
     };
   });
-  const backpackPanel = <FlexCol className="w-full h-full min-w-0 min-h-0 p-1 fancy-container"><p className="text-xs font-semibold mb-1">Bag storage</p><FlexRow className="gap-1 mb-1 flex-wrap">{tabbedBagStorages.map((bp, idx) => { const sid = String(bp.id || `storage_${idx + 1}`); return <button key={`tabbed-bag-${sid}`} type="button" className={`fancy-container px-1 text-xs ${sid === activeTabbedStorage ? "bg-black/10" : ""}`} onClick={() => setActiveStorageId(sid)}>{bp.label || `Storage ${idx + 1}`}</button>; })}</FlexRow>{tabbedBagStorages.length < 1 ? <p className="text-xs opacity-80">{separateStorages.length < 1 ? "No bag storage." : `${separateStorages.length} bag space(s) rendered as separate panels.`}</p> : <StorageGrid gridClassName="grid gap-1" gridStyle={{ gridTemplateColumns: `repeat(${activeTabbedColumns}, minmax(0, 1fr))` }} columns={activeTabbedColumns} cells={activeTabbedCells} renderItemVisual={renderItemVisual} onDragOver={handleDragOver} onDropAt={(index) => handleStorageDrop(activeTabbedStorage, index)} onDragStartAt={(item, index) => handleDragStart(item, "storage", index, activeTabbedStorage)} onMouseEnterItem={(item, e) => scheduleHover(item, e.clientX, e.clientY)} onMouseLeaveItem={hideHover} onContextMenuItem={(item, index, e) => { hideHover(); setItemMenu({ x: e.clientX, y: e.clientY, from: "storage", index, item, storageId: activeTabbedStorage }); }} />}<p className="text-xs mt-1">Equipped bags: {equippedBags.length} | Stored bags: {storedBags.length}</p><FlexRow className="w-full min-w-0 mt-1 gap-1 justify-between fancy-container p-0.5 cursor-pointer" onClick={() => setIsMoneyModalOpen(true)}><MoneyDisplay copper={inventoryMoneyToCopper(inventory?.money || defaultMoney)} className="text-xs" /></FlexRow></FlexCol>;
+  const backpackPanel = <></>;
 
   const applyMoneyDelta = async (sign: 1 | -1) => {
     const current = inventory?.money || defaultMoney;
@@ -544,13 +524,13 @@ export function useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInv
 
   const moneyModal = isMoneyModalOpen ? createPortal(<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2"><div className="fancy-container p-1 w-[min(420px,95vw)] max-h-[90vh] overflow-auto flex flex-col gap-1"><p className="font-bold text-center">Money</p><MoneyDisplay copper={inventoryMoneyToCopper(inventory?.money || defaultMoney)} className="justify-center" /><MoneyAddInput id="character-money-delta" valueCopper={moneyInputCopper} onChange={setMoneyInputCopper} /><FlexRow className="justify-end gap-1 flex-wrap"><button className="fancy-container p-0.5" onClick={() => setIsMoneyModalOpen(false)}>Close</button><button className="fancy-container p-0.5" onClick={() => applyMoneyDelta(1)}>Add</button><button className="fancy-container p-0.5" onClick={() => applyMoneyDelta(-1)}>Extract</button></FlexRow></div></div>, document.body) : null;
   const itemHoverModal = hoveredItem ? createPortal(<ItemHoverCard item={hoveredItem} x={hoverPos.x} y={hoverPos.y} iconFallback="misc" />, document.body) : null;
-  const itemContextMenu = itemMenu ? createPortal(<div className="fixed inset-0 z-[100010]" onClick={() => setItemMenu(null)}><div className="fixed z-[100011] fancy-container p-1 text-xs min-w-[140px] flex flex-col" style={{ left: `${Math.min(window.innerWidth - 160, itemMenu.x + 4)}px`, top: `${Math.min(window.innerHeight - 180, itemMenu.y + 4)}px` }} onClick={(e) => e.stopPropagation()}>{vendorMode ? <button className="w-full text-left px-2 py-1 hover:bg-black/10" onClick={openSellAction}>Eladas</button> : <><button className="w-full text-left px-2 py-1 hover:bg-black/10" onClick={handleDropAction}>Eldob</button><button className="w-full text-left px-2 py-1 hover:bg-black/10" onClick={openSellAction}>Elad</button>{itemMenu.item.consumable === true ? <button className="w-full text-left px-2 py-1 hover:bg-black/10" onClick={handleUseAction}>Használ</button> : null}{itemMenu.from === "storage" && itemMenu.item.equipable ? <button className="w-full text-left px-2 py-1 hover:bg-black/10" onClick={handleEquipAction}>Felvesz</button> : null}</>}</div></div>, document.body) : null;
+  const itemContextMenu = itemMenu ? createPortal(<div className="fixed inset-0 z-[100010]" onClick={() => setItemMenu(null)}><div className="fixed z-[100011] fancy-container p-1 text-xs min-w-[140px] flex flex-col" style={{ left: `${Math.min(window.innerWidth - 160, itemMenu.x + 4)}px`, top: `${Math.min(window.innerHeight - 180, itemMenu.y + 4)}px` }} onClick={(e) => e.stopPropagation()}>{vendorMode ? <button className="w-full text-left px-2 py-1 hover:bg-black/10" onClick={openSellAction}>Eladas</button> : <><button className="w-full text-left px-2 py-1 hover:bg-black/10" onClick={handleDropAction}>Eldob</button><button className="w-full text-left px-2 py-1 hover:bg-black/10" onClick={openSellAction}>Elad</button>{itemMenu.item.consumable === true && !isBagOrSatchel(itemMenu.item) ? <button className="w-full text-left px-2 py-1 hover:bg-black/10" onClick={handleUseAction}>Használ</button> : null}{itemMenu.from === "storage" && itemMenu.item.equipable ? <button className="w-full text-left px-2 py-1 hover:bg-black/10" onClick={handleEquipAction}>Felvesz</button> : null}</>}</div></div>, document.body) : null;
   const sellModal = sellTarget ? createPortal(<div className="fixed inset-0 bg-black/50 z-[100005] flex items-center justify-center p-2"><div className="fancy-container p-2 w-[min(420px,95vw)] flex flex-col gap-2"><p className="font-bold text-center">Eladas - {sellTarget.item.name}</p><MoneyAddInput id="character-sell-price" label="Requested price" valueCopper={sellInputCopper} onChange={setSellInputCopper} /><FlexRow className="justify-end gap-1 flex-wrap"><button className="fancy-container p-0.5" onClick={() => setSellTarget(null)}>Close</button><button className="fancy-container p-0.5" onClick={() => void submitSellAction()}>Send</button></FlexRow></div></div>, document.body) : null;
 
   return { equipmentPanel, backpackPanel, bagStoragePanels, defaultStoragePanel, moneyModal, itemHoverModal, itemContextMenu, sellModal };
 }
 
-export default function Inventory({ inventory, vendorMode, onMoneyChange, onInventoryChange, onDropItem, onSellItem, onUseItem, onEquipItem }: { inventory?: Character.Item.TInventory; vendorMode?: boolean; onMoneyChange?: (money: Character.Item.TMoney) => Promise<void> | void; onInventoryChange?: (inventory: Character.Item.TInventory) => Promise<void> | void; onDropItem?: (source: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; onSellItem?: (source: ServerApi.CharacterRoutes.ItemActionSource, requestedPriceCopper: number) => Promise<void> | void; onUseItem?: (source: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; onEquipItem?: (source: ServerApi.CharacterRoutes.ItemActionSource, targetSlotId?: string, target?: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; }) {
-  const { equipmentPanel, backpackPanel, bagStoragePanels, defaultStoragePanel, moneyModal, itemHoverModal, itemContextMenu, sellModal } = useInventoryPanels({ inventory, vendorMode, onMoneyChange, onInventoryChange, onDropItem, onSellItem, onUseItem, onEquipItem });
+export default function Inventory({ inventory, vendorMode, defaultCapacity, onMoneyChange, onInventoryChange, onDropItem, onSellItem, onUseItem, onEquipItem }: { inventory?: Character.Item.TInventory; vendorMode?: boolean; defaultCapacity?: number; onMoneyChange?: (money: Character.Item.TMoney) => Promise<void> | void; onInventoryChange?: (inventory: Character.Item.TInventory) => Promise<void> | void; onDropItem?: (source: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; onSellItem?: (source: ServerApi.CharacterRoutes.ItemActionSource, requestedPriceCopper: number) => Promise<void> | void; onUseItem?: (source: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; onEquipItem?: (source: ServerApi.CharacterRoutes.ItemActionSource, targetSlotId?: string, target?: ServerApi.CharacterRoutes.ItemActionSource) => Promise<void> | void; }) {
+  const { equipmentPanel, backpackPanel, bagStoragePanels, defaultStoragePanel, moneyModal, itemHoverModal, itemContextMenu, sellModal } = useInventoryPanels({ inventory, vendorMode, defaultCapacity, onMoneyChange, onInventoryChange, onDropItem, onSellItem, onUseItem, onEquipItem });
   return <>{equipmentPanel}{defaultStoragePanel}{backpackPanel}{bagStoragePanels.map((entry) => entry.panel)}{moneyModal}{itemHoverModal}{itemContextMenu}{sellModal}</>;
 }

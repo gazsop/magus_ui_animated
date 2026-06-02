@@ -137,18 +137,18 @@ Internal import aliases:
 
 ## Inventory UI Notes
 
-- Default storage is rendered as a separate movable panel (fixed `4x2`).
-- Non-default bag storages render as standalone inventory spaces instead of a tab-only bag inventory.
+- Default storage is rendered as a separate movable weapon/shield rack sized by class `maxCarriedWeapons`, with money controls at the bottom.
+- Equipped bag and satchel storages render as standalone inventory spaces; the old shared bag storage panel is removed.
 - Moves persist explicit storage placement (`placement.storageId` + slot).
 - Equipment slots are strict single-slot targets and ignore item storage footprint.
 - Equipped items keep their last storage anchor in `placement.slot` so they can return to storage without fake equipment coordinates.
-- Equipment moves call `POST /characters/equipItem` for storage-to-equipment, equipment-to-storage, and equipment-to-equipment placement. Four bag slots (`bag1` through `bag4`) accept storage items; items marked `createsInventorySpace` create their own storage space from the item storage settings.
+- Equipment moves call `POST /characters/equipItem` for storage-to-equipment, equipment-to-storage, and equipment-to-equipment placement. The `bag` slot accepts bag items and the `satchel` slot accepts satchel items.
 - Character inventory items expose a right-click menu:
   - `Eldob` calls `POST /characters/dropItem`
   - `Elad` creates a vendor-mode sell request for admin approval
   - `Használ` calls `POST /characters/useItem` for consumables
   - `Felvesz` calls `POST /characters/equipItem` for equippable items
-- Dropping a bag removes its linked storage and contents; selling or unequipping non-empty bags is blocked server-side.
+- Selling, dropping, or unequipping non-empty bag/satchel items is blocked server-side.
 
 
 ## API Integration

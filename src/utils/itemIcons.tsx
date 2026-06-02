@@ -61,6 +61,9 @@ export const getItemDefaultIcon = (
       );
     case Character.Item.ITEM_TYPE_EQUIPPABLE.SHIELD:
       return <ArmorShieldIcon className={className} />;
+    case Character.Item.ITEM_TYPE_EQUIPPABLE.BAG:
+    case Character.Item.ITEM_TYPE_EQUIPPABLE.SATCHEL:
+      return <CharBagIcon className={className} />;
     default:
       return emptyFallback === "trinket" ? (
         <ArmorTrinketIcon className={className} />
@@ -102,10 +105,8 @@ export const getEmptySlotIcon = (
       return <ArmorShieldIcon className={className} />;
     case "bracer":
       return <ArmorBracerIcon className={className} />;
-    case "bag1":
-    case "bag2":
-    case "bag3":
-    case "bag4":
+    case "bag":
+    case "satchel":
       return <CharBagIcon className={className} />;
     default:
       return <MiscIcon className={className} />;

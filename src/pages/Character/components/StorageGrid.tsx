@@ -6,6 +6,7 @@ import { FlexCol } from "@components/Flex";
 type StorageGridProps = {
   gridClassName: string;
   gridStyle?: h.JSX.CSSProperties;
+  storageId?: string;
   cells: ({ item: Character.Item.TItem; amount: number } | null)[];
   columns: number;
   renderItemVisual: (item: Character.Item.TItem, className?: string) => h.JSX.Element;
@@ -23,6 +24,7 @@ type StorageGridProps = {
 export default function StorageGrid({
   gridClassName,
   gridStyle,
+  storageId,
   cells,
   columns,
   renderItemVisual,
@@ -51,7 +53,7 @@ export default function StorageGrid({
       ))}
       {cells.map((cell, index) => {
         if (!cell) return null;
-        const size = getItemGridSize(cell.item);
+        const size = getItemGridSize(cell.item, storageId);
         return (
           <div
             key={`storage-item-${index}-${cell.item.name}`}

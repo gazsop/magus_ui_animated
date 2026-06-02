@@ -76,6 +76,9 @@ const FieldCol = ({ children }: { children: ComponentChildren }) => (
 );
 
 export default function ItemEditorSection(props: TItemEditorSectionProps) {
+  const isBagOrSatchel =
+    props.equipable === Character.Item.ITEM_TYPE_EQUIPPABLE.BAG ||
+    props.equipable === Character.Item.ITEM_TYPE_EQUIPPABLE.SATCHEL;
   return (
     <FlexCol className="w-full min-w-0 gap-1 fancy-container p-1 shrink-0">
       <FlexRow className="w-full min-w-0 gap-1 flex-wrap items-start">
@@ -121,8 +124,9 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
         <InputUnq
           id="item-maxstack"
           label="Max stack"
-          value={props.maxStack}
+          value={isBagOrSatchel ? "1" : props.maxStack}
           onChange={(e) => props.setMaxStack(e.currentTarget.value)}
+          disabled={isBagOrSatchel}
           className="min-w-0"
           widthOverride="w-full sm:w-32"
         />
@@ -162,7 +166,8 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
           <label className="mb-0.5">Consumable</label>
           <input
             type="checkbox"
-            checked={props.consumable}
+            checked={isBagOrSatchel ? false : props.consumable}
+            disabled={isBagOrSatchel}
             onChange={(e) => props.setConsumable(Boolean(e.currentTarget.checked))}
           />
         </FieldCol>
@@ -170,12 +175,12 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
           <label className="mb-0.5">Creates inventory space</label>
           <input
             type="checkbox"
-            checked={props.createsInventorySpace}
+            checked={isBagOrSatchel ? true : props.createsInventorySpace}
+            disabled={isBagOrSatchel}
             onChange={(e) => props.setCreatesInventorySpace(Boolean(e.currentTarget.checked))}
           />
         </FieldCol>
-        {props.equipable === Character.Item.ITEM_TYPE_EQUIPPABLE.STORAGE ||
-        props.createsInventorySpace ? (
+        {isBagOrSatchel || props.createsInventorySpace ? (
           <>
             <InputUnq
               id="item-storage-sizex"

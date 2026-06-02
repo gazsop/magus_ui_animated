@@ -934,6 +934,7 @@ export default function CharacterPage({
   const { equipmentPanel, backpackPanel, bagStoragePanels, defaultStoragePanel, moneyModal, itemHoverModal, itemContextMenu, sellModal } = useInventoryPanels({
     inventory: selectedCharacter.inventory,
     vendorMode: Boolean(vendorState?.enabled),
+    defaultCapacity: selectedClassDef?.maxCarriedWeapons,
     onMoneyChange: async (money) => {
       const nextCharacter: Character.TCharacter = {
         ...selectedCharacter,
@@ -1159,7 +1160,6 @@ export default function CharacterPage({
         <FlexRow
           className={`w-full min-w-0 gap-2 ${isNarrowMobile ? "flex-col" : "flex-row"}`}
         >
-          <div className="flex-1 min-w-0 min-h-0">{characterPanels.inventory}</div>
           <div className="flex-1 min-w-0 min-h-0">{characterPanels.defaultStorage}</div>
           {characterPanels.bagStorages.map((entry) => (
             <div key={`mobile-bag-storage-${entry.storageId}`} className="flex-1 min-w-0 min-h-0">
@@ -1428,19 +1428,6 @@ export default function CharacterPage({
                     await saveCharacter(nextCharacter);
                   }}
                 />
-              </GridItem>
-              <GridItem
-                x={layout.inventory.x}
-                y={layout.inventory.y}
-                colSpan={layout.inventory.w}
-                rowSpan={layout.inventory.h}
-                editable={isLayoutEdit}
-                grid={gridSpec}
-                onCommit={(next) => updateLayout("inventory", next)}
-              >
-                <>
-                  {backpackPanel}
-                </>
               </GridItem>
               <GridItem
                 x={layout.default_storage.x}
