@@ -323,6 +323,7 @@ Event dispatching is centralized through `src/contexts/sseContext.tsx` and can b
 Chat windows subscribe to `chat:message`, `chat:allRoom`, `chat:typing`, and `chat:policy`.
 Presence badges hydrate from the global `connected` snapshot and then track live presence events.
 YNEV map markers update from adventure SSE and silently refresh while the map window is open to recover from missed production stream events.
+The `SSE Debug` launcher window shows current browser SSE connections, a rolling log of incoming SSE data with the source stream (`global` or `adventure:<advId>`), and the server `/events/debug` stream snapshot so production buffering or stale stream problems are visible.
 
 ## Render-Stability Architecture
 

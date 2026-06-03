@@ -163,9 +163,13 @@ export const LauncherBar = memo(function LauncherBar(props: {
                   }
                   onClick={() => props.toggleOrOpenWindow(windowElem.name)}
                   onContextMenu={(e) => {
-                    if (windowElem.basePersistentLauncher) return;
                     e.preventDefault();
                     e.stopPropagation();
+                    if (windowElem.isOpen) {
+                      window.dispatchEvent(new Event(`rnd-window-lock-toggle:${windowElem.name}`));
+                      return;
+                    }
+                    if (windowElem.basePersistentLauncher) return;
                     props.togglePinnedWindow(windowElem.name);
                   }}
                   notification={windowElem.hasNotification}

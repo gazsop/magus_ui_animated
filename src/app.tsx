@@ -657,6 +657,16 @@ function UIElement(props: {
       keepStateAcrossPages: true,
       launcherGroup: "general",
     }),
+    defineWindowRegistration({
+      id: "SSE Debug",
+      kind: "sse-debug",
+      title: "SSE Debug",
+      icon: "SSE",
+      defaultOpen: false,
+      allowedPages: LOGGED_IN_PAGES,
+      keepStateAcrossPages: true,
+      launcherGroup: "general",
+    }),
     ...(isAdmin
       ? [
           defineWindowRegistration({
@@ -672,7 +682,7 @@ function UIElement(props: {
           }),
         ]
       : []),
-    ...(isSuperAdmin
+        ...(isSuperAdmin
       ? [
           defineWindowRegistration({
             id: "Dev",

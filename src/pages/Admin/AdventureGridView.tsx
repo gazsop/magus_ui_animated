@@ -1,4 +1,4 @@
-import { Adventure, Character, Application, Vendor } from "@shared/contracts";
+import { Adventure, Character, Application, ServerApi, Vendor } from "@shared/contracts";
 import { createPortal, useEffect, useRef, useState } from "preact/compat";
 import {
   applySecondaryStatPoints,
@@ -50,6 +50,24 @@ type TItemAuraTarget = TAuraTarget & {
 };
 
 const TURN_DURATION_MS = 10_000;
+const ADMIN_EQUIPMENT_SLOT_IDS = [
+  "hands",
+  "mainHand",
+  "head",
+  "neck",
+  "chest",
+  "legs",
+  "feet",
+  "rings1",
+  "rings2",
+  "cloak",
+  "shoulder",
+  "trinket",
+  "offHand",
+  "bracer",
+  "bag",
+  "satchel",
+] as const;
 
 const clampInt = (value: number, min: number, max: number) => {
   if (!Number.isFinite(value)) return min;
@@ -741,21 +759,76 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
       { label: Character.SECONDARY_STAT_LEVEL.BASIC, value: Character.SECONDARY_STAT_LEVEL.BASIC },
       { label: Character.SECONDARY_STAT_LEVEL.MASTER, value: Character.SECONDARY_STAT_LEVEL.MASTER },
     ];
-    const inventoryItems = (c?.inventory?.backpacks || []).flatMap((bp, bpIndex) =>
-      (bp.items || []).map((wrapped, itemIndex) => ({
+    const inventoryItems = (c?.inventory?.backpacks || []).flatMap((bp, bpIndex) => {
+      const width = Math.max(1, Number(bp.size?.sizeX || 1));
+      return (bp.items || []).map((wrapped, itemIndex) => ({
         bpIndex,
         storageId: String(bp.id || (bp.isDefault ? "storage_default" : `storage_${bpIndex + 1}`)),
         storageLabel: String(bp.label || (bp.isDefault ? "Default" : `Storage ${bpIndex + 1}`)),
         itemIndex,
+        storageIndex: wrapped.placement?.slot
+          ? Math.max(0, Number(wrapped.placement.slot.placeY || 0)) * width +
+            Math.max(0, Number(wrapped.placement.slot.placeX || 0))
+          : itemIndex,
         amount: wrapped.amount || 0,
         item: wrapped.item,
         additionalAuras: wrapped.additionalAuras || [],
         placement: wrapped.placement,
-      }))
-    );
+        bag: wrapped.bag,
+      }));
+    });
     const equippedItems = inventoryItems.filter(
       (row) => !!row.item?.equipable && !!row.placement?.equippedSlotId
     );
+    const removeCharacterItem = (source: ServerApi.CharacterRoutes.ItemActionSource) => {
+      requestCharacters<Character.TCharacterServer>({
+        endPoint: "/dropItem",
+        body: {
+          uid: entry.id,
+          advId,
+          source,
+        },
+      })
+        .then((response) => {
+          const parsed = parseCharacterPayload(response.data);
+          if (!parsed.json) return;
+          const row = response.data as { hash?: string };
+          const nextEntry = commitUpdatedCharacter(
+            entry,
+            parsed.json,
+            parsed.computed,
+            row.hash
+          );
+          openCharacterDataWindow(nextEntry, parsed.json);
+        })
+        .catch((error) => {
+          setError("Failed to remove item: " + error);
+        });
+    };
+    const equippedStorageOwners = new Map<string, string>();
+    inventoryItems.forEach((row) => {
+      const bag = (row as typeof row & { bag?: Character.Item.TBagInstance }).bag;
+      if (!bag?.id) return;
+      if (bag.state !== "equipped" && !row.placement?.equippedSlotId) return;
+      equippedStorageOwners.set(bag.id, row.item.name);
+    });
+    const inventoryStorageGroups = (c?.inventory?.backpacks || []).map((bp, bpIndex) => {
+      const storageId = String(bp.id || (bp.isDefault ? "storage_default" : `storage_${bpIndex + 1}`));
+      const isDefault = bp.isDefault || storageId === "storage_default";
+      const ownerName = equippedStorageOwners.get(storageId);
+      return {
+        storageId,
+        label: isDefault
+          ? "Default"
+          : ownerName || String(bp.label || `Storage ${bpIndex + 1}`),
+        bpIndex,
+        isDefault,
+        isActiveBagStorage: !isDefault && equippedStorageOwners.has(storageId),
+        items: inventoryItems.filter(
+          (row) => row.bpIndex === bpIndex && !row.placement?.equippedSlotId
+        ),
+      };
+    });
     const characterAuras = c?.auras || [];
     const money = c?.inventory?.money || [
       { name: Character.Item.MONEY.GOLD, amount: 0 },
@@ -1219,6 +1292,24 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
                           </td>
                           <td>{row.item.equipable}</td>
                           <td>x{row.amount}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="fancy-container px-2 py-0.5"
+                              onClick={() =>
+                                removeCharacterItem({
+                                  from: "equipment",
+                                  index: row.placement?.equippedSlotId
+                                    ? ADMIN_EQUIPMENT_SLOT_IDS.indexOf(
+                                        row.placement.equippedSlotId as (typeof ADMIN_EQUIPMENT_SLOT_IDS)[number]
+                                      )
+                                    : -1,
+                                })
+                              }
+                            >
+                              Remove
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1366,127 +1457,133 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
               <p className="text-xs mb-1">
                 <MoneyDisplay copper={inventoryMoneyToCopper(money)} className="text-xs" />
               </p>
-              <div className="min-h-0 grow overflow-y-auto">
-                {inventoryItems.length === 0 ? (
+              <div className="min-h-0 grow overflow-y-auto flex flex-col gap-2">
+                {inventoryStorageGroups.length === 0 ? (
                   <p>-</p>
                 ) : (
-                  <table className="w-full border-collapse">
-                    <tbody>
-                      {inventoryItems.map((row) => (
-                        <tr key={`${entry.id}-inv-${row.bpIndex}-${row.itemIndex}`}>
-                          <td className="pr-2 font-semibold">
-                            <span
-                              className="cursor-help"
-                              onMouseEnter={(e) => {
-                                setHoveredItem(row.item);
-                                setHoverPos({ x: e.clientX, y: e.clientY });
-                              }}
-                              onMouseMove={(e) => {
-                                setHoverPos({ x: e.clientX, y: e.clientY });
-                              }}
-                              onMouseLeave={() => setHoveredItem(null)}
-                            >
-                              {row.item.name}
-                            </span>
-                          </td>
-                          <td>{row.item.equipable ? `EQ: ${row.item.equipable}` : "Bag item"}</td>
-                          <td>x{row.amount}</td>
-                          <td>
-                            <div className="text-xs pr-2 min-w-[160px]">
-                              {Array.isArray(row.additionalAuras) && row.additionalAuras.length > 0 ? (
-                                <div className="flex flex-col gap-0.5 mb-0.5">
-                                  {row.additionalAuras.map((aura, auraIndex) => (
-                                    <AuraDisplay
-                                      key={`${entry.id}-item-aura-${row.bpIndex}-${row.itemIndex}-${auraIndex}`}
-                                      aura={aura}
-                                      sourceLabel="item"
-                                      showName={false}
-                                      showColorDot={false}
-                                    />
-                                  ))}
-                                </div>
-                              ) : (
-                                <span>Auras: 0</span>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              className="fancy-container px-2 py-0.5 mr-1"
-                              onClick={() => {
-                                if (!c) return;
-                                setItemAuraTarget({
-                                  uid: entry.id,
-                                  advId,
-                                  json: c,
-                                  entry,
-                                  bpIndex: row.bpIndex,
-                                  itemIndex: row.itemIndex,
-                                  itemName: row.item.name,
-                                });
-                                setItemAuraDraft(createEmptyAuraEditorDraft({ color: "" }));
-                                setIsItemAuraModalOpen(true);
-                              }}
-                            >
-                              +Aura
-                            </button>
-                            <button
-                              type="button"
-                              className="fancy-container px-2 py-0.5"
-                              onClick={() => {
-                                if (!c) return;
-                                const next = JSON.parse(JSON.stringify(c)) as Character.TCharacter;
-                                const bp = next.inventory?.backpacks?.[row.bpIndex];
-                                const selected = bp?.items?.[row.itemIndex];
-                                if (!selected) return;
-                                const current = Array.isArray(selected.additionalAuras)
-                                  ? selected.additionalAuras
-                                  : [];
-                                if (current.length < 1) return;
-                                selected.additionalAuras = current.slice(0, current.length - 1);
-                                void persistCharacterUpdate({
-                                  uid: entry.id,
-                                  advId,
-                                  json: next,
-                                  entry,
-                                  errorPrefix: "Failed to remove item aura",
-                                });
-                              }}
-                            >
-                              -Aura
-                            </button>
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className="fancy-container px-2 py-0.5"
-                              onClick={() => {
-                                if (!c) return;
-                                const next = JSON.parse(JSON.stringify(c)) as Character.TCharacter;
-                                const bp = next.inventory?.backpacks?.[row.bpIndex];
-                                if (!bp || !bp.items?.[row.itemIndex]) return;
-                                const selected = bp.items[row.itemIndex];
-                                const nextAmount = Math.max(0, Number(selected.amount || 0) - 1);
-                                if (nextAmount <= 0) {
-                                  bp.items.splice(row.itemIndex, 1);
-                                } else {
-                                  selected.amount = nextAmount;
-                                }
-                                void persistCharacterUpdate({
-                                  uid: entry.id,
-                                  advId,
-                                  json: next,
-                                  entry,
-                                  errorPrefix: "Failed to remove item",
-                                });
-                              }}
-                            >
-                              -1
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  inventoryStorageGroups.map((group) => (
+                    <div
+                      key={`${entry.id}-storage-${group.storageId}`}
+                      className="border border-slate-600 rounded p-1"
+                    >
+                      <p className="font-semibold text-xs mb-1">
+                        {group.label}
+                        {group.isDefault
+                          ? " (default)"
+                          : group.isActiveBagStorage
+                            ? " (equipped storage)"
+                            : " (stored storage)"}
+                      </p>
+                      {group.items.length === 0 ? (
+                        <p className="text-xs">-</p>
+                      ) : (
+                        <table className="w-full border-collapse">
+                          <tbody>
+                            {group.items.map((row) => (
+                              <tr key={`${entry.id}-inv-${row.bpIndex}-${row.itemIndex}`}>
+                                <td className="pr-2 font-semibold">
+                                  <span
+                                    className="cursor-help"
+                                    onMouseEnter={(e) => {
+                                      setHoveredItem(row.item);
+                                      setHoverPos({ x: e.clientX, y: e.clientY });
+                                    }}
+                                    onMouseMove={(e) => {
+                                      setHoverPos({ x: e.clientX, y: e.clientY });
+                                    }}
+                                    onMouseLeave={() => setHoveredItem(null)}
+                                  >
+                                    {row.item.name}
+                                  </span>
+                                </td>
+                                <td>{row.item.equipable ? `EQ: ${row.item.equipable}` : "Bag item"}</td>
+                                <td>x{row.amount}</td>
+                                <td>
+                                  <div className="text-xs pr-2 min-w-[160px]">
+                                    {Array.isArray(row.additionalAuras) && row.additionalAuras.length > 0 ? (
+                                      <div className="flex flex-col gap-0.5 mb-0.5">
+                                        {row.additionalAuras.map((aura, auraIndex) => (
+                                          <AuraDisplay
+                                            key={`${entry.id}-item-aura-${row.bpIndex}-${row.itemIndex}-${auraIndex}`}
+                                            aura={aura}
+                                            sourceLabel="item"
+                                            showName={false}
+                                            showColorDot={false}
+                                          />
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span>Auras: 0</span>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="fancy-container px-2 py-0.5 mr-1"
+                                    onClick={() => {
+                                      if (!c) return;
+                                      setItemAuraTarget({
+                                        uid: entry.id,
+                                        advId,
+                                        json: c,
+                                        entry,
+                                        bpIndex: row.bpIndex,
+                                        itemIndex: row.itemIndex,
+                                        itemName: row.item.name,
+                                      });
+                                      setItemAuraDraft(createEmptyAuraEditorDraft({ color: "" }));
+                                      setIsItemAuraModalOpen(true);
+                                    }}
+                                  >
+                                    +Aura
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="fancy-container px-2 py-0.5"
+                                    onClick={() => {
+                                      if (!c) return;
+                                      const next = JSON.parse(JSON.stringify(c)) as Character.TCharacter;
+                                      const bp = next.inventory?.backpacks?.[row.bpIndex];
+                                      const selected = bp?.items?.[row.itemIndex];
+                                      if (!selected) return;
+                                      const current = Array.isArray(selected.additionalAuras)
+                                        ? selected.additionalAuras
+                                        : [];
+                                      if (current.length < 1) return;
+                                      selected.additionalAuras = current.slice(0, current.length - 1);
+                                      void persistCharacterUpdate({
+                                        uid: entry.id,
+                                        advId,
+                                        json: next,
+                                        entry,
+                                        errorPrefix: "Failed to remove item aura",
+                                      });
+                                    }}
+                                  >
+                                    -Aura
+                                  </button>
+                                </td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="fancy-container px-2 py-0.5"
+                                    onClick={() =>
+                                      removeCharacterItem({
+                                        from: "storage",
+                                        index: row.storageIndex,
+                                        storageId: row.storageId,
+                                      })
+                                    }
+                                  >
+                                    -1
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  ))
                 )}
               </div>
             </div>
@@ -1758,68 +1855,39 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
                             type="button"
                             className="fancy-container px-2 py-0.5"
                             onClick={() => {
-                              if (!addTarget?.json) return;
-                              const next = JSON.parse(JSON.stringify(addTarget.json)) as Character.TCharacter;
-                              if (!next.inventory) {
-                                next.inventory = {
-                                  backpacks: [],
-                                  money: addTarget.json.inventory?.money || [
-                                    { name: Character.Item.MONEY.GOLD, amount: 0 },
-                                    { name: Character.Item.MONEY.SILVER, amount: 0 },
-                                    { name: Character.Item.MONEY.COPPER, amount: 0 },
-                                  ],
-                                };
-                              }
-                              if (!Array.isArray(next.inventory.backpacks)) next.inventory.backpacks = [];
-                              if (next.inventory.backpacks.length === 0) {
-                                next.inventory.backpacks.push({
-                                  id: "storage_default",
-                                  label: "Default",
-                                  isDefault: true,
-                                  type: "basic",
-                                  size: { sizeX: 4, sizeY: 2, weight: 0, slotAmount: 8 },
-                                  items: [],
-                                });
-                              }
-                              const firstBackpack = next.inventory.backpacks[0];
-                              const existing = it.createsInventorySpace
-                                ? undefined
-                                : firstBackpack.items.find((row) => row.item?.name === it.name);
-                              if (existing) {
-                                existing.amount = Number(existing.amount || 0) + Math.max(1, itemQty);
-                              } else {
-                                const amount = it.createsInventorySpace
-                                  ? 1
-                                  : Math.max(1, itemQty);
-                                const entries = it.createsInventorySpace
-                                  ? Array.from({ length: Math.max(1, itemQty) }, () => ({
-                                      amount,
-                                      item: it,
-                                      additionalAuras: [],
-                                    }))
-                                  : [
-                                      {
-                                        amount,
-                                        item: it,
-                                        additionalAuras: [],
-                                      },
-                                    ];
-                                firstBackpack.items.push(...entries);
-                              }
-                              void persistCharacterUpdate({
-                                uid: addTarget.uid,
-                                advId: addTarget.advId,
-                                json: next,
-                                entry: addTarget.entry,
-                                errorPrefix: "Failed to add item to inventory",
-                                onSuccess: () => {
+                              if (!addTarget) return;
+                              setAddBusy(true);
+                              requestCharacters<Character.TCharacterServer>({
+                                endPoint: "/grantItem",
+                                body: {
+                                  uid: addTarget.uid,
+                                  advId: addTarget.advId,
+                                  itemName: it.name,
+                                  amount: itemQty,
+                                },
+                              })
+                                .then((response) => {
+                                  const parsed = parseCharacterPayload(response.data);
+                                  if (parsed.json) {
+                                    const row = response.data as { hash?: string };
+                                    const nextEntry = commitUpdatedCharacter(
+                                      addTarget.entry,
+                                      parsed.json,
+                                      parsed.computed,
+                                      row.hash
+                                    );
+                                    openCharacterDataWindow(nextEntry, parsed.json);
+                                  }
                                   setIsAddItemModalOpen(false);
                                   setAddTarget(null);
                                   setItemSearch("");
                                   setItemResults([]);
                                   setAllItems([]);
-                                },
-                              });
+                                })
+                                .catch((error) => {
+                                  setError("Failed to add item to inventory: " + error);
+                                })
+                                .finally(() => setAddBusy(false));
                             }}
                           >
                             Add

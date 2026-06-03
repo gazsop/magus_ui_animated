@@ -218,7 +218,7 @@ function FancyWindow({
   };
   return (
     <div
-      className={`relative bg-left-top bg-no-repeat bg-cover h-full p-4`}
+      className={`relative box-border bg-left-top bg-no-repeat bg-cover h-full p-4`}
       style={{
         height: `${height}px`,
         width: `${width}px`,
@@ -236,7 +236,7 @@ function FancyWindow({
         <InnerBorder />
       </div>
       <FlexCol
-        className="overflow-auto h-full w-full"
+        className="box-border overflow-hidden h-full w-full min-h-0"
         style={{
           zIndex: "var(--layer-window-content)",
         }}

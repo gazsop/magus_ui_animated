@@ -80,7 +80,7 @@ function PopupModal({
     } else {
       setInputValue(popup.input !== undefined ? popup.input.toString() : "");
     }
-  }, [popup.input, popup.selectOptions]);
+  }, [popup.label, popup.text, popup.input, popup.selectOptions]);
 
   const save = () => {
     if (popup.saveCallback) {

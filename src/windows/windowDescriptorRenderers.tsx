@@ -12,6 +12,7 @@ import Admin from "@pages/Admin/Admin";
 import CharacterPage from "@pages/Character/Character";
 import Dev from "@pages/Dev";
 import SharedAdventureNotes from "@pages/SharedAdventureNotes";
+import SseDebug from "@pages/SseDebug";
 import Wiki from "@pages/Wiki";
 import { Application } from "@shared/contracts";
 import { AdminClassDescriptorWindow } from "@pages/Admin/CharacterClassHandling";
@@ -177,6 +178,12 @@ registerWindowDescriptorRenderer("admin-page", (descriptor, props) => (
 registerWindowDescriptorRenderer("dev-page", (descriptor, props) => (
   <RndDescriptorWindow descriptor={descriptor} props={props}>
     <Dev />
+  </RndDescriptorWindow>
+));
+
+registerWindowDescriptorRenderer("sse-debug", (descriptor, props) => (
+  <RndDescriptorWindow descriptor={descriptor} props={props}>
+    <SseDebug />
   </RndDescriptorWindow>
 ));
 

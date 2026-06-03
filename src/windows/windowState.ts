@@ -173,7 +173,9 @@ export const windowsReducer = (
       const windowName = getRegistrationName(action.window);
       if (!windowName) return state;
       const defaultOpen =
-        action.openOnRegister === false
+        action.openOnRegister === true
+          ? true
+          : action.openOnRegister === false
           ? false
           : action.window.defaultOpen ?? action.window.descriptor?.defaultOpen ?? true;
       const existingIndex = state.windows.findIndex((windowElem) => windowElem.name === windowName);

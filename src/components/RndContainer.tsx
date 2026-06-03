@@ -110,6 +110,15 @@ function RndContainer({
   }, [id, locked]);
 
   useEffect(() => {
+    const eventName = `rnd-window-lock-toggle:${id}`;
+    const onToggleLock = () => {
+      setLocked((prev) => !prev);
+    };
+    window.addEventListener(eventName, onToggleLock);
+    return () => window.removeEventListener(eventName, onToggleLock);
+  }, [id]);
+
+  useEffect(() => {
     const onResize = () => {
       const { viewport, xOffPx, yOffPx, maxWidth, maxHeight } = getBounds();
       const minWidth = Math.min(MIN_WINDOW_SIZE, maxWidth);
@@ -271,19 +280,21 @@ function RndContainer({
               )}
             </FlexRow>
           </FlexRow>
-          <FlexRow
-            className="h-[calc(100%-1.5rem)] w-full min-w-0 min-h-0 overflow-auto grow"
+          <FlexCol
+            className="h-full w-full min-w-0 min-h-0 overflow-hidden grow"
             style={{
               zIndex: "var(--layer-window-content)",
             }}
           >
             <FlexCol
-              className={`fancy-container w-full h-full min-w-0 min-h-0 shrink-0 grow overflow-auto p-2 pt-4`}
+              className={`fancy-container box-border w-full h-full min-w-0 min-h-0 shrink-0 grow overflow-hidden p-2 pt-4`}
             >
-              <p>{label}</p>
-              {children}
+              <p className="shrink-0">{label}</p>
+              <FlexCol className="grow min-h-0 min-w-0 overflow-hidden">
+                {children}
+              </FlexCol>
             </FlexCol>
-          </FlexRow>
+          </FlexCol>
         </FancyWindow>
       </Rnd>
     </div>
