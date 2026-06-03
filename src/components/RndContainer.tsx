@@ -3,8 +3,7 @@ import { useContext, useEffect, useRef, useState } from "preact/hooks";
 import { DraggableData, Rnd, RndDragEvent } from "react-rnd";
 import { FlexRow, FlexCol } from "./Flex";
 import RefreshCwIcon from "./icons/general/RefreshCwIcon";
-import MoveIcon from "./icons/general/MoveIcon";
-import MaximizeIcon from "./icons/general/MaximizeIcon";
+import LockIcon from "./icons/general/LockIcon";
 import MinimizeIcon from "./icons/general/MinimizeIcon";
 import XIcon from "./icons/general/XIcon";
 import FancyWindow from "./FancyWindow";
@@ -20,6 +19,7 @@ const xOff = {
 };
 
 const MIN_WINDOW_SIZE = 240;
+const LOCK_STORAGE_PREFIX = "rnd-window-lock:";
 
 export const RndWindowControlsContext = createContext<{
   minimize?: () => void;
@@ -80,8 +80,10 @@ function RndContainer({
     };
   };
 
-  const [onDragState, setOnDragState] = useState(false);
-  const [resizeable, setResizeable] = useState(false);
+  const [locked, setLocked] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(`${LOCK_STORAGE_PREFIX}${id}`) === "1";
+  });
   const [windowSize, setWindowSize] = useState({
     width: getBounds().maxWidth,
     height: getBounds().maxHeight,
@@ -102,6 +104,10 @@ function RndContainer({
   useEffect(() => {
     emitSizeChange(windowSize);
   }, [windowSize]);
+
+  useEffect(() => {
+    window.localStorage.setItem(`${LOCK_STORAGE_PREFIX}${id}`, locked ? "1" : "0");
+  }, [id, locked]);
 
   useEffect(() => {
     const onResize = () => {
@@ -148,14 +154,6 @@ function RndContainer({
         onDragStart={(e: RndDragEvent) => {
           bringToFront();
           if (e && onDragStart) onDragStart(e);
-          if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
-            const target = e.target as HTMLElement;
-            if (target.closest(".move") && onDragState) {
-              setOnDragState(false);
-              e.preventDefault();
-              e.stopPropagation();
-            }
-          }
         }}
         onDragStop={(_e: MouseEvent | TouchEvent, d: DraggableData) => {
           const { viewport, xOffPx, yOffPx } = getBounds();
@@ -220,8 +218,9 @@ function RndContainer({
         className={`${
           className ? className + " " : ""
         }flex flex-col border border-black pointer-events-auto`}
-        disableDragging={!onDragState}
-        enableResizing={resizeable}
+        dragHandleClassName="rnd-window-drag-handle"
+        disableDragging={locked}
+        enableResizing={!locked}
         resizeGrid={[20, 20]}
         dragGrid={[20, 20]}
         style={{
@@ -230,7 +229,7 @@ function RndContainer({
       >
         <FancyWindow height={windowSize.height} width={windowSize.width}>
           <FlexRow
-            className="absolute top-2 right-4 h-auto w-max max-w-[calc(100%-2rem)] justify-end items-center cursor-default select-none"
+            className="rnd-window-drag-handle absolute top-2 right-4 h-auto w-max max-w-[calc(100%-2rem)] justify-end items-center cursor-move select-none"
             style={{
               zIndex: "var(--layer-window-header)",
             }}
@@ -241,8 +240,6 @@ function RndContainer({
                 className="h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer"
                 onClick={() => {
                   bringToFront();
-                  setOnDragState(true);
-                  setResizeable(false);
                   setWindowPosition({ x: getXOff(), y: getYOff() });
                   const { maxWidth, maxHeight } = getBounds();
                   setWindowSize({
@@ -251,24 +248,19 @@ function RndContainer({
                   });
                 }}
               />
-              <MoveIcon
-                className={`relative h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer ${
-                  onDragState ? "text-[#22c55e]" : ""
-                }`}
+              <span
+                className="cursor-pointer"
                 onClick={() => {
                   bringToFront();
-                  setOnDragState((prev) => !prev);
+                  setLocked((prev) => !prev);
                 }}
-              />
-              <MaximizeIcon
-                className={`h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer ${
-                  resizeable ? "text-[#22c55e]" : ""
-                }`}
-                onClick={() => {
-                  bringToFront();
-                  setResizeable((prev) => !prev);
-                }}
-              />
+              >
+                <LockIcon
+                  className={`h-5 sm:h-4 m-1 w-7 sm:w-6 ${
+                    locked ? "text-[#ef4444]" : "text-[#22c55e]"
+                  }`}
+                />
+              </span>
               {effectiveMinimize ? (
                 <span onClick={effectiveMinimize}>
                   <MinimizeIcon className="h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer" />
@@ -291,12 +283,6 @@ function RndContainer({
               <p>{label}</p>
               {children}
             </FlexCol>
-            {onDragState && (
-              <div
-                id="invisible-layer"
-                className={`absolute top-[1.5rem] left-0 w-full h-[calc(100%-1.5rem)] bg-transparent grow`}
-              ></div>
-            )}
           </FlexRow>
         </FancyWindow>
       </Rnd>

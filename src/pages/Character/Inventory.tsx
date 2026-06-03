@@ -160,7 +160,6 @@ const canPlaceCell = (
   ignoreIndex?: number
 ) => {
   if (storageId === DEFAULT_STORAGE_ID && !isWeaponOrShield(cell.item)) return false;
-  if (storageId !== DEFAULT_STORAGE_ID && isBagOrSatchel(cell.item)) return false;
   const indexes = getOccupiedIndexes(cell.item, targetIndex, width, cells.length, storageId);
   if (!indexes) return false;
   const occupation = getOccupationMap(cells, width, storageId);

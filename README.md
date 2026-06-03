@@ -143,6 +143,8 @@ Internal import aliases:
 - Equipment slots are strict single-slot targets and ignore item storage footprint.
 - Equipped items keep their last storage anchor in `placement.slot` so they can return to storage without fake equipment coordinates.
 - Equipment moves call `POST /characters/equipItem` for storage-to-equipment, equipment-to-storage, and equipment-to-equipment placement. The `bag` slot accepts bag items and the `satchel` slot accepts satchel items.
+- Admin item grants call `POST /characters/grantItem` and use the same server-side placement path as vendor purchases. Bag/satchel items are stored in active equipped storage first, then auto-equipped into an empty matching slot when no storage space is available.
+- Admin adventure character cards render inventory grouped by storage so default, equipped bag, and equipped satchel contents are visible separately.
 - Character inventory items expose a right-click menu:
   - `Eldob` calls `POST /characters/dropItem`
   - `Elad` creates a vendor-mode sell request for admin approval

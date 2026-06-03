@@ -384,6 +384,7 @@ export default function ItemHandlingWindow({
         ITEM_CACHE.hash = response.data?.hash || "";
         ITEM_CACHE.loaded = true;
         setAllItems(items);
+        setPopup(null);
       })
       .catch((error) => {
         setError(toErrorMessage(error));
