@@ -1,14 +1,15 @@
-import { useEffect, useState } from "preact/hooks";
+﻿import { useEffect, useState } from "preact/hooks";
 import type { ComponentType } from "preact";
 import { FlexCol } from "@components/Flex";
 import useRequest from "@hooks/request";
 import useError from "@hooks/error";
-import { Application, Character } from "@shared/contracts";
+import { Application, Character, ServerApi } from "@shared/contracts";
 import { User } from "@shared/contracts";
-import { useSseSubscription } from "@hooks/sse";
+import { useLiveEventSubscription } from "@hooks/liveEvents";
 import { formatClientDateTime } from "@/core/datetime";
 import { useDataContext } from "@/contexts/dataContext";
 import { ensurePushSubscription } from "@/utils/push";
+import AppModal from "@components/AppModal";
 
 type TErrorLogRow = {
   id?: number;
@@ -85,6 +86,9 @@ export default function Dev() {
   const [pushRequest] = useRequest(Application.REQUEST_CONTROLLER.PUSH);
   const { setError } = useError();
   const [rows, setRows] = useState<TErrorLogRow[]>([]);
+  const [bugReports, setBugReports] = useState<ServerApi.RestRoutes.BugReport[]>([]);
+  const [selectedBugReport, setSelectedBugReport] =
+    useState<ServerApi.RestRoutes.BugReport | null>(null);
   const [runtime, setRuntime] = useState<TRuntimeSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [clearCacheBusy, setClearCacheBusy] = useState(false);
@@ -103,6 +107,7 @@ export default function Dev() {
   const [pushMessage, setPushMessage] = useState("Dev push test");
   const [pushStatus, setPushStatus] = useState("Not checked");
   const [pushBusy, setPushBusy] = useState(false);
+  const [deleteBugBusyId, setDeleteBugBusyId] = useState<number | null>(null);
 
   const selectedSpellImportClass = classes.find((entry) => entry.id === spellImportClassId);
   const spellImportSpecs = [
@@ -366,13 +371,18 @@ export default function Dev() {
         endPoint: "/getErrorLogs",
         body: { limit: 200 },
       }),
+      restRequest<ServerApi.RestRoutes.BugReport[]>({
+        endPoint: "/getBugReports",
+        body: { limit: 200 },
+      }),
       restRequest<TRuntimeSnapshot>({
         endPoint: "/getRuntimeState",
         body: {},
       }),
     ])
-      .then(([errorsResp, runtimeResp]) => {
+      .then(([errorsResp, bugReportsResp, runtimeResp]) => {
         setRows(Array.isArray(errorsResp.data) ? errorsResp.data : []);
+        setBugReports(Array.isArray(bugReportsResp.data) ? bugReportsResp.data : []);
         setRuntime(runtimeResp.data || null);
       })
       .catch((error) => {
@@ -381,11 +391,28 @@ export default function Dev() {
       .finally(() => setIsLoading(false));
   };
 
+  const deleteBugReport = (report: ServerApi.RestRoutes.BugReport) => {
+    if (!report.id) return;
+    setDeleteBugBusyId(report.id);
+    restRequest<{ ok: boolean }, ServerApi.RestRoutes.DeleteBugReportBody>({
+      endPoint: "/deleteBugReport",
+      body: { id: report.id },
+    })
+      .then(() => {
+        setBugReports((prev) => prev.filter((entry) => entry.id !== report.id));
+        setSelectedBugReport((prev) => (prev?.id === report.id ? null : prev));
+      })
+      .catch((error) => {
+        setError(`Failed to delete bug report: ${error}`);
+      })
+      .finally(() => setDeleteBugBusyId(null));
+  };
+
   useEffect(() => {
     load();
   }, []);
 
-  useSseSubscription("dev:runtime", (event) => {
+  useLiveEventSubscription("dev:runtime", (event) => {
     const payload = event.payload as TRuntimeSnapshot | undefined;
     if (!payload || typeof payload !== "object") return;
     setRuntime(payload);
@@ -393,6 +420,58 @@ export default function Dev() {
 
   return (
     <FlexCol className="w-full h-full min-h-0 fancy-container p-2 gap-1">
+      {selectedBugReport ? (
+        <AppModal
+          id="bug-report-details-modal"
+          label={`Bug report #${selectedBugReport.id || "-"}`}
+          widthClass="w-[min(640px,95vw)]"
+          actions={
+            <>
+              <button
+                type="button"
+                className="fancy-container px-2 py-1"
+                onClick={() => setSelectedBugReport(null)}
+              >
+                Close
+              </button>
+              {selectedBugReport.id ? (
+                <button
+                  type="button"
+                  className="fancy-container px-2 py-1 text-red-700 font-bold"
+                  disabled={deleteBugBusyId === selectedBugReport.id}
+                  onClick={() => deleteBugReport(selectedBugReport)}
+                >
+                  {deleteBugBusyId === selectedBugReport.id ? "Deleting..." : "Delete"}
+                </button>
+              ) : null}
+            </>
+          }
+        >
+          <div className="flex flex-col gap-1 text-sm">
+            <p>
+              <span className="font-semibold">Who:</span>{" "}
+              {selectedBugReport.uname || selectedBugReport.uid || "-"}
+            </p>
+            <p>
+              <span className="font-semibold">When:</span>{" "}
+              {formatClientDateTime(selectedBugReport.createdAt)}
+            </p>
+            <p>
+              <span className="font-semibold">Status:</span> {selectedBugReport.status}
+            </p>
+            <p>
+              <span className="font-semibold">Path:</span> {selectedBugReport.path || "-"}
+            </p>
+            <p>
+              <span className="font-semibold">User agent:</span>{" "}
+              {selectedBugReport.userAgent || "-"}
+            </p>
+            <pre className="whitespace-pre-wrap break-words fancy-container p-2">
+              {selectedBugReport.content}
+            </pre>
+          </div>
+        </AppModal>
+      ) : null}
       <div className="flex items-center justify-between">
         <p className="font-bold">Dev Panel</p>
         <div className="flex items-center gap-1">
@@ -504,7 +583,7 @@ export default function Dev() {
           </select>
         </div>
         <div className="flex flex-col gap-0.5">
-          <label>Specialization</label>
+          <label>Szakosodás</label>
           <select
             className="text-black px-2 py-1 rounded min-w-[180px]"
             value={spellImportSpec}
@@ -638,6 +717,46 @@ export default function Dev() {
       </div>
       <div className="grow min-h-0 overflow-auto grid grid-cols-1 xl:grid-cols-2 gap-1">
         <div className="fancy-container p-1 min-h-0 overflow-auto">
+          <p className="font-bold mb-1">Bug Reports ({bugReports.length})</p>
+          {isLoading ? (
+            <p>Loading...</p>
+          ) : bugReports.length === 0 ? (
+            <p>No bug reports found.</p>
+          ) : (
+            bugReports.map((report, idx) => (
+              <div
+                key={`bug-report-${report.id || idx}`}
+                className="fancy-container p-1 mb-1 cursor-pointer"
+                onClick={() => setSelectedBugReport(report)}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p>
+                      [{formatClientDateTime(report.createdAt)}] {report.status.toUpperCase()}{" "}
+                      {report.uname || report.uid || "-"}
+                    </p>
+                    <p className="break-words line-clamp-3">{report.content}</p>
+                  </div>
+                  {report.id ? (
+                    <button
+                      type="button"
+                      className="shrink-0 px-1 text-red-700 font-bold"
+                      disabled={deleteBugBusyId === report.id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        deleteBugReport(report);
+                      }}
+                    >
+                      x
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="fancy-container p-1 min-h-0 overflow-auto">
           <p className="font-bold mb-1">
             Runtime Snapshot {runtime?.timestamp ? `(${formatClientDateTime(runtime.timestamp)})` : ""}
           </p>
@@ -715,3 +834,4 @@ export default function Dev() {
     </FlexCol>
   );
 }
+

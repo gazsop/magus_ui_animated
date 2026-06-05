@@ -137,20 +137,20 @@ export default function AuraEditor({
       {showName ? (
         <input
           className="w-full px-2 py-1 rounded"
-          placeholder="Aura name"
+          placeholder="Aura neve"
           value={draft.name}
           onInput={(e) => setDraft({ name: (e.currentTarget as HTMLInputElement).value })}
         />
       ) : null}
       <textarea
         className="w-full px-2 py-1 rounded min-h-[72px]"
-        placeholder="Aura description"
+        placeholder="Aura leírása"
         value={draft.description}
         onInput={(e) => setDraft({ description: (e.currentTarget as HTMLTextAreaElement).value })}
       />
       {showColor ? (
         <FlexRow className="items-center gap-2">
-          <span className="text-xs">Color</span>
+          <span className="text-xs">Szín</span>
           <input
             type="color"
             value={draft.color}
@@ -161,12 +161,12 @@ export default function AuraEditor({
 
       <FlexCol className="gap-1 min-w-0">
         <FlexRow className="items-center justify-between gap-2 flex-wrap">
-          <p className="font-semibold text-sm">Effects</p>
+          <p className="font-semibold text-sm">Hatások</p>
           <button type="button" className="fancy-container px-2 py-0.5" onClick={addEffect}>
             + Effect
           </button>
         </FlexRow>
-        {draft.effect.length < 1 ? <p className="text-xs">No effects.</p> : null}
+        {draft.effect.length < 1 ? <p className="text-xs">Nincs hatás.</p> : null}
         {draft.effect.map((effect, index) => (
           <FlexRow key={`effect-${index}`} className="gap-2 items-center flex-wrap min-w-0">
             <select
@@ -208,12 +208,12 @@ export default function AuraEditor({
 
       <FlexCol className="gap-2 min-w-0">
         <FlexRow className="items-center justify-between gap-2 flex-wrap">
-          <p className="font-semibold text-sm">Modifier Groups</p>
+          <p className="font-semibold text-sm">Módosítócsoportok</p>
           <button type="button" className="fancy-container px-2 py-0.5" onClick={addModifierGroup}>
             + Modifier Group
           </button>
         </FlexRow>
-        {draft.modifiers.length < 1 ? <p className="text-xs">No modifiers.</p> : null}
+        {draft.modifiers.length < 1 ? <p className="text-xs">Nincs módosító.</p> : null}
         {draft.modifiers.map((group, groupIndex) => (
           <FlexCol key={`modifier-group-${groupIndex}`} className="border border-slate-500 rounded p-2 gap-2 min-w-0">
             <FlexRow className="items-center justify-between gap-2 flex-wrap">
@@ -336,7 +336,7 @@ export default function AuraEditor({
               <FlexRow key={`secondary-${groupIndex}-${index}`} className="gap-1 flex-wrap items-center">
                 <input
                   className="px-2 py-1 rounded w-full sm:w-auto"
-                  placeholder="Secondary id"
+                  placeholder="Másodlagos ID"
                   value={entry.id}
                   onInput={(e) =>
                     onChange(

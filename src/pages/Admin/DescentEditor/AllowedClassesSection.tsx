@@ -22,7 +22,7 @@ export default function AllowedClassesSection({
       <FlexRow className="grow justify-between flex-wrap gap-1 shrink-0 !min-h-fit">
         <SelectUnq<string, SingleValue<HTMLOptionData<string>>>
           id={`DescentHandling-${selectedDescent.id}-classes`}
-          label="Classes"
+          label="Kasztok"
           optionData={
             classList ? classList.map((c) => ({ value: c.id, label: c.name })) : []
           }
@@ -79,7 +79,7 @@ export default function AllowedClassesSection({
           </label>
           <CheckBoxUnq
             id={`DescentHandling-${selectedDescent.id}-permission-${c.id}`}
-            label="Permission"
+            label="Jogosultság"
             className="shrink-0"
             onChange={(e) => {
               const val = (e.target as HTMLInputElement).checked;

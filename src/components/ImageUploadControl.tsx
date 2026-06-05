@@ -122,7 +122,7 @@ export default function ImageUploadControl({
       {isOpen && source ? (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-2">
           <div className="fancy-container p-2 w-[min(760px,95vw)] max-h-[90vh] overflow-auto">
-            <p>Image crop editor</p>
+            <p>Képkivágás-szerkesztő</p>
             <div className="relative w-full h-[min(420px,60vh)] fancy-container">
               <Cropper
                 image={source}
@@ -136,7 +136,7 @@ export default function ImageUploadControl({
               />
             </div>
             <FlexRow className="items-center gap-1 mt-1 flex-wrap">
-              <label>Ratio</label>
+              <label>Arány</label>
               <select
                 className="text-black h-[26px] rounded px-1"
                 value={String(aspect)}
@@ -151,17 +151,17 @@ export default function ImageUploadControl({
                   </option>
                 ))}
               </select>
-              <label>Render</label>
+              <label>Renderelés</label>
               <select
                 className="text-black h-[26px] rounded px-1"
                 value={fit}
                 onChange={(e) => setFit(e.currentTarget.value as Character.TImageFit)}
               >
-                <option value="cover">cutout</option>
-                <option value="contain">contain</option>
-                <option value="fill">stretch</option>
+                <option value="cover">kivágás</option>
+                <option value="contain">illesztés</option>
+                <option value="fill">nyújtás</option>
               </select>
-              <label>Zoom</label>
+              <label>Nagyítás</label>
               <input
                 type="range"
                 min={1}

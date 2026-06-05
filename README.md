@@ -105,6 +105,20 @@ Requirements:
 
 The custom service worker handles `push` and `notificationclick` events while keeping the existing PWA update prompt behavior.
 
+## Player Trading
+
+Direct chat windows include a `Trade` button next to `Send`. It opens an adventure-scoped character trade modal where each user can offer items from storage/equipment plus money. Trade prompts and updates are delivered through the long-poll event stream; both sides must accept the current offers before the backend transfers inventory.
+
+Chat message bubbles hide sender names and show a short timestamp before the message in `HH:MM:ss` format. Hovering the timestamp shows the full `YYYY.MM.DD. HH:MM:ss` timestamp.
+
+All-room chat supports `@jotunder`. When included in a user message, the backend stores the user message, asks the server-owned AI persona using the latest 20 all-room messages, then posts the AI response back into all-room chat as a normal persisted message.
+
+Chat inputs also search normal `@...` references through `/chat/searchReferences`. Selecting a result stores an inline chat reference token in the message text. Rendered references are interactive: item references show an item hover card, spell and NPC references open detail modals, and YNEV references open the YNEV map at the referenced location.
+
+## Admin Adventure Character Cards
+
+The admin adventure character grid cards and character data window can open spells and secondary skills in separate windows that reuse the same player-facing panels as the character sheet. The data window keeps identity/class/level/personality fields read-only, lets admins add XP through `/characters/grantXp`, includes collapsed RP details, and includes the same damage/heal panel behavior as player characters while persisting changes through the admin character update path.
+
 ## Local Tile Map
 
 The `YNEV` launcher window renders a local Leaflet tile map from static assets in:
@@ -115,7 +129,7 @@ public/imgs/tiles/{zoom}/{column}/{row}.png
 
 Current map constants are fixed in the client for zoom levels `1..6` and `512px` square tiles. The existing PWA asset precache includes these PNG tiles in production builds, and the custom service worker also applies cache-first runtime caching for images and tile assets with a large one-year cache.
 
-The map also loads adventure-scoped persistent markers through `/ynev/markers/get` with the active `advId`. `Self` creates private markers for the current adventure, `All` creates shared markers for the current adventure, and placement opens a color/comment dialog before saving. The map shows explicit marker placement status such as armed, accepted, saving, saved, and failed so production marker API problems are visible to the user. Admins and superadmins can mark shared `All` markers as `Hidden` from a checkbox in the placement dialog: hidden markers are visible only to admins until they are revealed from the marker popup. Saved markers use the selected color as the pin fill and show the creator in the popup. Shared marker create/reveal syncs through adventure SSE event `ynev:markerUpserted`, and deletion syncs through `ynev:markerDeleted`, so open YNEV maps update shared markers without reload. Search results use a temporary red marker unless saved through one of those buttons. All-marker chat event coordinates are clickable and open the YNEV map centered on that source coordinate without creating an extra temporary marker.
+The map also loads adventure-scoped persistent markers through `/ynev/markers/get` with the active `advId`. `Self` creates private markers for the current adventure, `All` creates shared markers for the current adventure, and placement opens a color/comment dialog before saving. The map shows explicit marker placement status such as armed, accepted, saving, saved, and failed so production marker API problems are visible to the user. Admins and superadmins can mark shared `All` markers as `Hidden` from a checkbox in the placement dialog: hidden markers are visible only to admins until they are revealed from the marker popup. Saved markers use the selected color as the pin fill and show the creator in the popup. Shared marker create/reveal/delete syncs through long-poll events such as `ynev:markerUpserted` and `ynev:markerDeleted`, so open YNEV maps update shared markers without reload. Search results use a temporary red marker unless saved through one of those buttons. All-marker chat event coordinates are clickable and open the YNEV map centered on that source coordinate without creating an extra temporary marker.
 
 Admins and superadmins also get a `Cities` toggle. It renders linked city-map points from `public/data/ynev_locations.json` rows that include a `url`, opening a small map bubble with a `térkép` link.
 
@@ -165,26 +179,32 @@ Frontend request hook uses controller paths from shared contract types:
 - `/adventures`
 - `/characters`
 - `/rest`
-- `/events` (SSE streams via `EventSource`, not request hook)
+- `/events` (long polling through `POST /events/poll`)
 - `/chat`
 - `/ynev`
 
-Chat typing indicators use `POST /chat/typing` with client-side throttling and the transient `chat:typing` SSE event. Indicators expire locally if no fresh typing ping arrives. All-room event rows may carry optional `sourceType` and `sourceId` metadata; YNEV marker event coordinates are rendered as map-jump links.
+Live updates use `POST /events/poll` long polling backed by the server event log. `POST /events/pollChat` remains as a temporary compatibility endpoint. Chat messages, all-room deletes, chat policy, typing indicators, notes, markers, combat/vendor state, presence, runtime updates, and character updates are delivered through the shared long-poll path. All-room event rows may carry optional `sourceType` and `sourceId` metadata; YNEV marker event coordinates are rendered as map-jump links.
 
 Telemetry:
 
 - `POST /rest/reportClientError` (best-effort client/runtime/request error reporting)
 - `POST /rest/getErrorLogs` (used by superadmin Test page to list persisted errors)
+- Logged-in users get a `BUG` launcher shortcut. It opens a textarea and submits `/rest/submitBugReport`.
+- Superadmins see submitted bug reports in the `Dev` launcher window, can open a detail modal, and can delete reports through `/rest/deleteBugReport`.
 
 Role UX:
 
 - `Admin` launcher window is visible for `ADMIN` and `SUPERADMIN`.
 - `Dev` launcher window is visible only for `SUPERADMIN`.
+- `Live Events` debug launcher/window is visible only for `SUPERADMIN`; stale pinned entries are hidden for lower roles.
+- The chat policy toggle and all-room message delete controls are available to `ADMIN` and `SUPERADMIN`.
 
 Adventure shared notes window:
 
 - Permanent launcher: `Shared Notes` (`NT`) in window toolbar.
 - Adventure-dependent document (`advId`-scoped).
+- Notes render as message-like entries with author and saved timestamp.
+- Saving while holding the lock updates the current editor's entry; when a different user takes the lock, that user starts a new entry.
 - Lock-based editing:
   - `Take Edit` to acquire lock
   - `Release` to free lock
@@ -193,7 +213,7 @@ Adventure shared notes window:
   - current lock owner
   - last editor + last edit time
   - revision
-- Live updates via SSE events:
+- Live updates via long-poll events:
   - `notes:lock`
   - `notes:updated`
 
@@ -201,9 +221,9 @@ Adventure private notes window:
 
 - Permanent launcher: `Private Notes` (`PN`) in window toolbar.
 - Adventure-dependent and user-private document (`advId` + authenticated user scoped).
-- Private notes do not use edit locks; the owner can type immediately.
+- Private notes use the same entry rendering but do not require edit locks; the owner can type immediately.
 - Dirty private notes autosave periodically, can be saved manually with `Save now`, and attempt a keepalive save on window close or browser unload.
-- Live updates use owner-only adventure SSE events:
+- Live updates use owner-only long-poll events:
   - `private-notes:updated`
 - Private note content is not broadcast through shared `notes:*` events.
 
@@ -226,6 +246,12 @@ Admin page REST tools include dedicated windows for managing:
 - professions
 - items
   - supports admin image upload with crop (cutout), aspect selection, and fit mode (`cutout`/`contain`/`stretch`)
+- NPCs
+  - admin-only list for name, HM, `Character.TResource` HP/EP/resource points, primary stats, loot items, loot money, public notes, admin notes, and avatar upload
+- combats
+  - admin-only saved combat definitions with name, admin note, friendly NPCs, and enemy NPCs
+- vendors
+- XP levels
 
 Profession entries are consumed by backend validation for character updates.
 
@@ -239,7 +265,9 @@ Character sheet currently includes:
 - avatar upload (crop + ratio + fit mode) saved into character data
 - new-character RP wizard steps for class primary-stat rolls and initial HM allocation before RP details are finalized
 - new-character class preview renders the class `maxCarriedWeapons` value; admin class editing exposes the same field
-- level-up flow requires specialization selection when crossing level 10
+- level-up flow requires HP/resource rolls, HM allocation, and specialization selection when crossing level 10; gained secondary skill points are saved into the character's persistent `secondarySkillPoints` pool
+  - secondary skill windows show the available point pool and spend through `/characters/spendSecondarySkillPoints`
+  - `NONE` skills cost 1 point per value until they become `BASIC`; `BASIC` skills cost 2 points per value until they become `MASTER`; `MASTER` skills cannot be increased further
   - desktop/tablet shows specialization cards in 2-4 columns with level 10-20 spell previews
   - mobile shows one specialization card per page with previous/next paging
 
@@ -257,6 +285,8 @@ Payloads include message, stack (when available), request/response context and e
 AI chat:
 
 - The frontend sends only user/assistant conversation messages to `/ai/chat`; the system prompt is owned by the server.
+- The AI chat window supports multiple local tabs/sessions. Sessions and messages are saved in browser `localStorage`.
+- Each request sends only the active session's last 20 user/assistant messages.
 
 Admin adventure identity view:
 
@@ -273,8 +303,9 @@ Adventure admin datetime controls:
 
 Adventure admin character views:
 
-- `character:updated` SSE now refreshes both the 4x2 admin grid identity entry and any already-open admin character detail window for that character.
+- `character:updated` long-poll events refresh both the 4x2 admin grid identity entry and any already-open admin character detail window for that character.
 - Admin character detail Basic Data includes a level-gated specialization select for level 10+ characters, using the selected class `specs` and guarded character updates.
+- Admin character detail Basic Data includes guarded orb controls for adding/removing black, white, and void orbs from player characters.
 - Player spell panels show common spells plus spells matching `character.rp.specialization`; other specialization branches are hidden.
 - Secondary skill lists use Hungarian collation and show a red `!` beside skills that have an admin note; hovering the marker shows the note text.
 - Admin adventure/item aura editing uses the same structured aura editor UI as the player character page, including per-item additional aura editing.
@@ -282,9 +313,9 @@ Adventure admin character views:
 - Item aura editing can mark item auras as equipped-only or carried-or-equipped; carried item auras display and apply from inventory.
 - Admin adventure character view can add, edit, and remove existing manual user auras through the shared aura modal.
 - Admin REST item-handling keeps the item aura editor in a dedicated stacked block so aura controls wrap cleanly without overlapping at narrower window sizes.
-- Combat mode creates pending initiative rows in the admin adventure commands area, applies a red full-screen phase overlay to adventure clients, and pops up a required `k10` input for each player. On player character pages the red overlay scales with current HP: lower HP produces a stronger red tint and inset glow. Submitted player rolls update the admin initiative order through the combat runtime state.
+- Combat mode requires the admin to select a saved combat definition before starting. Starting combat creates pending player initiative rows plus friendly/enemy NPC rows from the selected combat. NPC combat cards show HP/EP/resource points from the NPC `Character.TResource` and include a `Kezelés` action for admins to apply damage, heal FP/EP, adjust resource points, and review the NPC combat damage log. The admin adventure grid orders player and NPC cards by current initiative while combat is active. Adventure clients still receive the red full-screen phase overlay and players get the required `k10` initiative input.
 - Vendor mode applies a white full-screen phase overlay to all adventure clients.
-- The SSE ping/pong heartbeat carries the mounted page's latest known adventure/character hashes. If the server reports stale data, the relevant page gently refetches and updates React state in the background instead of forcing a route reload.
+- The long-poll request carries the mounted page's latest known adventure/character hashes. If the server reports stale data, the relevant page gently refetches and updates React state in the background instead of forcing a route reload.
 - Production quiet errors are supported with `setError(message, { severity: "quiet" })` and `useRequest({ errorMode: "quiet" })`: background failures are still reported to server telemetry but do not open the blocking error modal outside development.
 
 Window launcher behavior:
@@ -311,23 +342,13 @@ Window launcher behavior:
   - Character page subwindows (`character-spells`, `character-secondary-skills`, `character-avatar-editor`) intentionally remain page-local because they depend on active Character page state.
 - Legacy JSX/function window registration and old string pinned records are no longer supported.
 
-## SSE Subscriptions
+## Live Event Subscriptions
 
-Client-side subscriptions:
-
-- global: `GET /events/global` after login
-- adventure: `GET /events/adventure/:advId` after adventure selection
-
-Both streams use cookie auth (`withCredentials: true`).
-Event dispatching is centralized through `src/contexts/sseContext.tsx` and can be consumed via `useSseSubscription` (`src/hooks/sse.ts`).
-Chat windows subscribe to `chat:message`, `chat:allRoom`, `chat:typing`, and `chat:policy`.
-Presence badges hydrate from the global `connected` snapshot and then track live presence events.
-YNEV map markers update from adventure SSE and silently refresh while the map window is open to recover from missed production stream events.
-The `SSE Debug` launcher window shows current browser SSE connections, a rolling log of incoming SSE data with the source stream (`global` or `adventure:<advId>`), and the server `/events/debug` stream snapshot so production buffering or stale stream problems are visible.
+Client-side subscriptions use `POST /events/poll` with cookie auth. Event dispatching is centralized through `src/contexts/liveEventsContext.tsx`, and helper subscriptions live in `src/hooks/liveEvents.ts`. The `Live Events` launcher shows long-poll connection state, server live-session state, and recent incoming event payloads.
 
 ## Render-Stability Architecture
 
-Client-side UI is split into isolated domains to prevent unrelated SSE/activity updates from rerendering heavy window/page trees:
+Client-side UI is split into isolated domains to prevent unrelated live-event/activity updates from rerendering heavy window/page trees:
 
 - `PresenceUIProvider` (`src/contexts/presenceUIContext.tsx`)
   - online badges
@@ -345,7 +366,7 @@ Client-side UI is split into isolated domains to prevent unrelated SSE/activity 
 
 Render-safety rules used in this client:
 
-- SSE reducers return previous references when payload does not change visible state.
+- Live-event reducers return previous references when payload does not change visible state.
 - `updateWindow(name, patch)` is guarded and no-ops if semantic fields are unchanged.
 - Window definitions/shortcuts are memoized in top-level UI composition.
 - Window callers should register descriptors, not inline JSX render factories.

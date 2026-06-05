@@ -12,14 +12,14 @@ export default function CharacterSpellsPanel({
 }) {
   return (
     <FlexCol className="fancy-container p-0.5 min-w-0 min-h-0 w-full h-full overflow-hidden">
-      <p className="font-bold">Spells</p>
+      <p className="font-bold">Varázslatok</p>
       <p className="text-xs opacity-80">
         Visible up to level {levelCap}
         {selectedSpecialization ? ` | Specialization: ${selectedSpecialization}` : ""}
       </p>
       <FlexCol className="gap-0.25 mt-0.5 w-full min-h-0 grow overflow-auto">
         {spells.length === 0 ? (
-          <p>No spells for current class.</p>
+          <p>Az aktuális kaszthoz nincs varázslat.</p>
         ) : (
           spells.map((spell) => (
             <div key={`spell-${spell.id}`} className="fancy-container p-0.5 select-none">

@@ -13,7 +13,7 @@ export default function SecondaryStatScalingsSection({
 }) {
   return (
     <SecondaryStatListEditor
-      title="SecondaryStatScaling"
+      title="Képzettségpont per szint"
       idPrefix="class-secondary-scaling"
       stats={selectedClass.modifiers.secondaryStatScalings}
       toInt={toInt}

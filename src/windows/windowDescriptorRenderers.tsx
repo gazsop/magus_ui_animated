@@ -1,4 +1,4 @@
-import { JSX } from "preact";
+﻿import { JSX } from "preact";
 import { useCallback, useState } from "preact/hooks";
 import { FlexCol } from "@components/Flex";
 import RndContainer from "@components/RndContainer";
@@ -12,12 +12,14 @@ import Admin from "@pages/Admin/Admin";
 import CharacterPage from "@pages/Character/Character";
 import Dev from "@pages/Dev";
 import SharedAdventureNotes from "@pages/SharedAdventureNotes";
-import SseDebug from "@pages/SseDebug";
+import LiveEventsDebug from "@pages/LiveEventsDebug";
 import Wiki from "@pages/Wiki";
 import { Application } from "@shared/contracts";
 import { AdminClassDescriptorWindow } from "@pages/Admin/CharacterClassHandling";
 import { AdminDescentDescriptorWindow } from "@pages/Admin/CharacterDescentHandling";
+import CombatHandlingWindow from "@pages/Admin/restHandling/CombatHandlingWindow";
 import ItemHandlingWindow from "@pages/Admin/restHandling/ItemHandlingWindow";
+import NpcHandlingWindow from "@pages/Admin/restHandling/NpcHandlingWindow";
 import ProfessionHandlingWindow from "@pages/Admin/restHandling/ProfessionHandlingWindow";
 import RestHandlingWindow from "@pages/Admin/restHandling/RestHandlingWindow";
 import VendorHandlingWindow from "@pages/Admin/restHandling/VendorHandlingWindow";
@@ -181,9 +183,9 @@ registerWindowDescriptorRenderer("dev-page", (descriptor, props) => (
   </RndDescriptorWindow>
 ));
 
-registerWindowDescriptorRenderer("sse-debug", (descriptor, props) => (
+registerWindowDescriptorRenderer("live-events-debug", (descriptor, props) => (
   <RndDescriptorWindow descriptor={descriptor} props={props}>
-    <SseDebug />
+    <LiveEventsDebug />
   </RndDescriptorWindow>
 ));
 
@@ -206,6 +208,12 @@ const AdminRestDescriptorWindow = ({
   if (descriptor.kind === "admin-items") {
     return <ItemHandlingWindow close={close} requestData={requestData} setError={setError} />;
   }
+  if (descriptor.kind === "admin-npcs") {
+    return <NpcHandlingWindow close={close} requestData={requestData} setError={setError} />;
+  }
+  if (descriptor.kind === "admin-combats") {
+    return <CombatHandlingWindow close={close} requestData={requestData} setError={setError} />;
+  }
   if (descriptor.kind === "admin-xp-levels") {
     return <XpLevelHandlingWindow close={close} requestData={requestData} setError={setError} />;
   }
@@ -220,6 +228,8 @@ const renderAdminRestDescriptor: TWindowDescriptorRenderer = (descriptor, props)
   "admin-rest",
   "admin-professions",
   "admin-items",
+  "admin-npcs",
+  "admin-combats",
   "admin-xp-levels",
   "admin-vendors",
 ].forEach((kind) => registerWindowDescriptorRenderer(kind, renderAdminRestDescriptor));
@@ -288,3 +298,4 @@ export const renderWindowDescriptor = (
   descriptor: TWindowDescriptor,
   props: TWindowRenderProps
 ) => <WindowDescriptorRenderer descriptor={descriptor} renderProps={props} />;
+

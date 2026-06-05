@@ -1,28 +1,28 @@
-import { useEffect, useState } from "preact/hooks";
+﻿import { useEffect, useState } from "preact/hooks";
 import { FlexCol, FlexRow } from "@components/Flex";
 import {
-  TSseDebugConnection,
-  TSseDebugEvent,
-  TSseDebugSnapshot,
-  useSseContext,
-} from "@contexts/sseContext";
+  TLiveDebugConnection,
+  TLiveDebugEvent,
+  TLiveDebugSnapshot,
+  useLiveEventsContext,
+} from "@contexts/liveEventsContext";
 import { formatClientDateTime } from "@/core/datetime";
 import { API_BASE_URL } from "@/core/config/runtime";
 import { ServerApi } from "@shared/contracts";
 
-const readyStateColor: Record<TSseDebugConnection["readyStateLabel"], string> = {
+const readyStateColor: Record<TLiveDebugConnection["readyStateLabel"], string> = {
   connecting: "text-yellow-700",
   open: "text-green-700",
   closed: "text-red-700",
   unknown: "text-gray-700",
 };
 
-const formatPayload = (event: TSseDebugEvent) =>
+const formatPayload = (event: TLiveDebugEvent) =>
   event.payloadPreview || event.rawPreview || "-";
 
-export default function SseDebug() {
-  const { getDebugSnapshot, subscribeDebug } = useSseContext();
-  const [snapshot, setSnapshot] = useState<TSseDebugSnapshot>(() =>
+export default function LiveEventsDebug() {
+  const { getDebugSnapshot, subscribeDebug } = useLiveEventsContext();
+  const [snapshot, setSnapshot] = useState<TLiveDebugSnapshot>(() =>
     getDebugSnapshot()
   );
   const [serverSnapshot, setServerSnapshot] =
@@ -73,10 +73,10 @@ export default function SseDebug() {
   return (
     <FlexCol className="w-full h-full min-h-0 shrink-0 gap-2 p-3 overflow-hidden text-black">
       <FlexCol className="gap-1 shrink-0 basis-36 min-h-0 overflow-hidden">
-        <div className="shrink-0 text-sm font-semibold">Browser SSE connections</div>
+        <div className="shrink-0 text-sm font-semibold">Browser live-event polling</div>
         <FlexCol className="grow min-h-0 gap-1 overflow-y-scroll overflow-x-hidden pr-1">
           {snapshot.connections.length === 0 ? (
-            <div className="text-xs opacity-70">No SSE connections registered.</div>
+            <div className="text-xs opacity-70">No live-event polling registered.</div>
           ) : (
             snapshot.connections.map((connection) => (
               <FlexRow
@@ -96,9 +96,9 @@ export default function SseDebug() {
         </FlexCol>
       </FlexCol>
 
-      <FlexCol className="gap-1 shrink-0 basis-44 min-h-0 overflow-hidden">
+      <FlexCol className="gap-1 shrink-0 basis-32 min-h-0 overflow-hidden">
         <FlexRow className="shrink-0 items-center justify-between">
-          <div className="text-sm font-semibold">Server SSE streams</div>
+          <div className="text-sm font-semibold">Server live-event sessions</div>
           <div className="text-xs opacity-70">
             {serverSnapshot
               ? `pid ${serverSnapshot.pid} | ${formatClientDateTime(serverSnapshot.generatedAt)}`
@@ -110,24 +110,20 @@ export default function SseDebug() {
         <FlexCol className="grow min-h-0 gap-1 overflow-y-scroll overflow-x-hidden pr-1">
           {serverDebugError ? (
             <div className="shrink-0 text-xs text-red-700">{serverDebugError}</div>
-          ) : !serverSnapshot || serverSnapshot.streams.length === 0 ? (
-            <div className="shrink-0 text-xs opacity-70">No server streams registered.</div>
+          ) : !serverSnapshot || serverSnapshot.sessions.length === 0 ? (
+            <div className="shrink-0 text-xs opacity-70">No server sessions registered.</div>
           ) : (
-            serverSnapshot.streams.map((stream) => (
+            serverSnapshot.sessions.map((session) => (
               <FlexRow
-                key={stream.id}
+                key={session.uid}
                 className="shrink-0 items-center gap-2 rounded border border-black/20 bg-white/60 px-2 py-1 text-xs"
               >
-                <span className="font-mono min-w-[190px] truncate">{stream.id}</span>
-                <span className={stream.readyState === "open" ? "text-green-700" : "text-red-700"}>
-                  {stream.readyState}
+                <span className="font-mono min-w-[150px] truncate">{session.uid}</span>
+                <span>{session.name}</span>
+                <span className={session.active ? "text-green-700" : "text-red-700"}>
+                  {session.active ? "active" : "inactive"}
                 </span>
-                <span>{stream.scope}</span>
-                {stream.advId ? <span>adv: {stream.advId}</span> : null}
-                <span>writes: {stream.writeCount}</span>
-                <span>stale: {stream.staleWriteCount}</span>
-                <span>last: {stream.lastEventType || "-"}</span>
-                <span>{stream.lastWriteAt ? formatClientDateTime(stream.lastWriteAt) : "-"}</span>
+                <span>last: {formatClientDateTime(session.lastPong)}</span>
               </FlexRow>
             ))
           )}
@@ -141,7 +137,7 @@ export default function SseDebug() {
         </FlexRow>
         <FlexCol className="grow min-h-0 overflow-y-scroll overflow-x-hidden rounded border border-black/20 bg-white/60">
           {snapshot.events.length === 0 ? (
-            <div className="p-2 text-xs opacity-70">No incoming SSE data yet.</div>
+            <div className="p-2 text-xs opacity-70">No incoming live-event data yet.</div>
           ) : (
             snapshot.events.map((event) => (
               <FlexCol
@@ -168,3 +164,4 @@ export default function SseDebug() {
     </FlexCol>
   );
 }
+

@@ -40,7 +40,7 @@ function RollItem(props: {
     <FlexRow>
       <InputUnq
         id={`${props.id}-nrOfRolls`}
-        label="nrOfRolls"
+        label="dobások száma"
         type="number"
         onChange={(e) => {
           emitRoll({
@@ -54,7 +54,7 @@ function RollItem(props: {
       />
       <InputUnq
         id={`${props.id}-nrOfDices`}
-        label="nrOfDices"
+        label="kockák száma"
         type="number"
         onChange={(e) => {
           emitRoll({
@@ -68,7 +68,7 @@ function RollItem(props: {
       />
       <SelectUnq
         id={`${props.id}-dice`}
-        label="Dice"
+        label="Kocka"
         optionData={Object.values(Adventure.DICE)
           .filter((value) => typeof value === "number")
           .map((c) => {
@@ -92,7 +92,7 @@ function RollItem(props: {
       ></SelectUnq>
       <InputUnq
         id={`${props.id}-constant`}
-        label="Flat"
+        label="Fix"
         type="number"
         onChange={(e) => {
           emitRoll({

@@ -35,7 +35,7 @@ const LauncherButton = (props: TLauncherButtonProps) => (
     {props.pinned ? (
       <span
         className="absolute bottom-[4px] right-[4px] text-[10px] leading-none"
-        title="Pinned"
+        title="Kitűzve"
       >
         P
       </span>
@@ -43,7 +43,7 @@ const LauncherButton = (props: TLauncherButtonProps) => (
     {props.notification ? (
       <span
         className="absolute top-[4px] right-[4px] w-2 h-2 rounded-full bg-red-500"
-        title="New message"
+        title="Új üzenet"
       />
     ) : null}
   </FlexRow>

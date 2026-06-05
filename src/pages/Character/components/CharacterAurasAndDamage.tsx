@@ -220,7 +220,7 @@ export default function useAurasAndDamagePanel({
   const aurasPanel = (
     <FlexCol className="fancy-container p-0.5 min-w-0 min-h-0 w-full h-full overflow-hidden">
       <div className="flex items-center justify-between gap-2 shrink-0">
-        <p className="font-bold">Auras</p>
+        <p className="font-bold">Aurák / hatások</p>
         <ButtonUnq
           id="aura-open-modal"
           onClick={() => {
@@ -233,7 +233,7 @@ export default function useAurasAndDamagePanel({
       </div>
       <FlexCol className="gap-0.25 mt-0.5 w-full min-h-0 grow overflow-auto">
         {mergedAuras.length === 0 ? (
-          <p>No active auras.</p>
+          <p>Nincs aktív aura.</p>
         ) : (
           <table className="w-full table-fixed border-separate border-spacing-y-0.5">
             <tbody>
@@ -255,9 +255,9 @@ export default function useAurasAndDamagePanel({
                   </td>
                   <td className="w-[84px] p-0.5 align-top">
                     {aura.manual ? (
-                      <ButtonUnq id={`remove-aura-${aura.id}`} onClick={() => removeAura(aura.id)} className="w-full">Remove</ButtonUnq>
+                      <ButtonUnq id={`remove-aura-${aura.id}`} onClick={() => removeAura(aura.id)} className="w-full">Eltávolítás</ButtonUnq>
                     ) : (
-                      <p className="text-center">Item</p>
+                      <p className="text-center">Tárgy</p>
                     )}
                   </td>
                 </tr>
@@ -270,7 +270,7 @@ export default function useAurasAndDamagePanel({
         ? createPortal(
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100008] p-2">
               <div className="fancy-container p-2 w-[min(520px,95vw)] max-w-[95vw] max-h-[90vh] overflow-auto flex flex-col gap-2">
-                <p className="font-semibold">Add Aura</p>
+                <p className="font-semibold">Aura hozzáadása</p>
                 <AuraEditor draft={auraDraft} onChange={setAuraDraft} />
                 <div className="flex justify-end gap-2 flex-wrap">
                   <button
@@ -298,7 +298,7 @@ export default function useAurasAndDamagePanel({
 
   const damagesPanel = (
     <FlexCol className="fancy-container p-0.5 min-w-0 min-h-0 w-full h-full overflow-hidden">
-      <p className="font-bold">Damage Tracker</p>
+      <p className="font-bold">Sebzéskrónika</p>
       <p className="break-words">
         HP: {character.resource.health.currentHp}/{character.resource.health.maxHp} | EP:{" "}
         {character.resource.health.currentEp}/{character.resource.health.maxEp}
@@ -306,25 +306,25 @@ export default function useAurasAndDamagePanel({
       <table className="w-full table-fixed border-separate border-spacing-y-0.5 shrink-0">
         <tbody>
           <tr>
-            <td className="w-[34%] pr-1 whitespace-nowrap"><label htmlFor="damage-value">Damage</label></td>
+            <td className="w-[34%] pr-1 whitespace-nowrap"><label htmlFor="damage-value">Sebzés</label></td>
             <td className="pr-1"><input id="damage-value" type="number" className="w-full px-1" value={damageValue} onInput={(e) => setDamageValue(Number(e.currentTarget.value) || 0)} /></td>
-            <td className="w-[92px]"><ButtonUnq id="damage-apply" onClick={applyDamage} className="w-full">Apply</ButtonUnq></td>
+            <td className="w-[92px]"><ButtonUnq id="damage-apply" onClick={applyDamage} className="w-full">Alkalmaz</ButtonUnq></td>
           </tr>
           <tr>
-            <td className="pr-1 whitespace-nowrap"><label htmlFor="heal-hp-value">Heal HP</label></td>
+            <td className="pr-1 whitespace-nowrap"><label htmlFor="heal-hp-value">ÉP gyógyulás</label></td>
             <td className="pr-1"><input id="heal-hp-value" type="number" className="w-full px-1" value={healHpValue} onInput={(e) => setHealHpValue(Number(e.currentTarget.value) || 0)} /></td>
-            <td><ButtonUnq id="heal-hp-apply" onClick={applyHpHeal} className="w-full">Apply HP</ButtonUnq></td>
+            <td><ButtonUnq id="heal-hp-apply" onClick={applyHpHeal} className="w-full">ÉP alkalmazása</ButtonUnq></td>
           </tr>
           <tr>
-            <td className="pr-1 whitespace-nowrap"><label htmlFor="heal-ep-value">Heal EP</label></td>
+            <td className="pr-1 whitespace-nowrap"><label htmlFor="heal-ep-value">FP visszatöltése</label></td>
             <td className="pr-1"><input id="heal-ep-value" type="number" className="w-full px-1" value={healEpValue} onInput={(e) => setHealEpValue(Number(e.currentTarget.value) || 0)} /></td>
-            <td><ButtonUnq id="heal-ep-apply" onClick={applyEpHeal} className="w-full">Apply EP</ButtonUnq></td>
+            <td><ButtonUnq id="heal-ep-apply" onClick={applyEpHeal} className="w-full">FP alkalmazása</ButtonUnq></td>
           </tr>
         </tbody>
       </table>
       <FlexCol className="mt-0.5 gap-0.25 min-h-0 grow overflow-auto w-full min-w-0">
         {(character.damageLog || []).length === 0 ? (
-          <p>No damage events.</p>
+          <p>Nincs sebzésesemény.</p>
         ) : (
           [...(character.damageLog || [])]
             .reverse()

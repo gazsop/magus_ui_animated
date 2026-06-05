@@ -8,31 +8,34 @@ const normalizeText = (value: unknown): string => String(value || "").trim();
 const spellMatchesSpec = (spell: TSpellPreview, specName: string): boolean =>
   normalizeText(spell.spec).toLowerCase() === normalizeText(specName).toLowerCase();
 
-const spellIsLevelTenToTwenty = (spell: TSpellPreview): boolean => {
+const spellIsVisibleAtCap = (spell: TSpellPreview, levelCap: number): boolean => {
   const lvlReq = Number(spell.lvlReq || 0);
-  return lvlReq >= 10 && lvlReq <= 20;
+  return lvlReq >= 0 && lvlReq <= levelCap;
 };
 
 const flattenSpecSpells = (
   spells: Character.Spell.TSpellElements[],
-  specName: string
+  specName: string,
+  levelCap: number
 ): TSpellPreview[] =>
   spells
     .flatMap((spell) => [spell, ...(spell.levels || [])])
     .filter((spell) => spellMatchesSpec(spell, specName))
-    .filter(spellIsLevelTenToTwenty)
+    .filter((spell) => spellIsVisibleAtCap(spell, levelCap))
     .sort((a, b) => Number(a.lvlReq || 0) - Number(b.lvlReq || 0));
 
 export default function CharacterSpecializationModal({
   specs,
   spells,
   selected,
+  levelCap,
   isMobile,
   onSelect,
 }: {
   specs: Character.TClass["specs"];
   spells: Character.Spell.TSpellElements[];
   selected: string;
+  levelCap: number;
   isMobile: boolean;
   onSelect: (specName: string) => void;
 }) {
@@ -51,7 +54,7 @@ export default function CharacterSpecializationModal({
 
   const renderSpecCard = (spec: Character.TClass["specs"][number]) => {
     const specName = normalizeText(spec.name);
-    const specSpells = flattenSpecSpells(spells, specName);
+    const specSpells = flattenSpecSpells(spells, specName, levelCap);
     const isSelected = normalizeText(selected).toLowerCase() === specName.toLowerCase();
 
     return (
@@ -75,9 +78,9 @@ export default function CharacterSpecializationModal({
         </div>
 
         <div className="min-h-0 grow overflow-auto flex flex-col gap-1">
-          <p className="text-xs font-semibold opacity-80">Level 10-20 spells</p>
+          <p className="text-xs font-semibold opacity-80">Level 0-{levelCap} spells</p>
           {specSpells.length === 0 ? (
-            <p className="text-xs opacity-70">No level 10-20 spells for this specialization yet.</p>
+            <p className="text-xs opacity-70">No level 0-{levelCap} spells for this specialization yet.</p>
           ) : (
             specSpells.map((spell) => (
               <div key={`spec-spell-${specName}-${spell.id}`} className="rounded border border-slate-600 p-1">
@@ -102,8 +105,8 @@ export default function CharacterSpecializationModal({
   if (visibleSpecs.length === 0) {
     return (
       <div className="flex flex-col gap-2 min-h-0">
-        <p className="text-sm font-semibold">Choose Specialization</p>
-        <p className="text-sm text-red-700">Current class has no specializations configured.</p>
+        <p className="text-sm font-semibold">Szakosodás választása</p>
+        <p className="text-sm text-red-700">Az aktuális kaszthoz nincs beállított szakosodás.</p>
       </div>
     );
   }
@@ -115,7 +118,7 @@ export default function CharacterSpecializationModal({
     return (
       <div className="flex flex-col gap-2 min-h-0">
         <div>
-          <p className="text-sm font-semibold">Choose Specialization</p>
+          <p className="text-sm font-semibold">Szakosodás választása</p>
           <p className="text-xs opacity-80">
             Page {currentPage + 1}/{visibleSpecs.length}
           </p>
@@ -148,9 +151,9 @@ export default function CharacterSpecializationModal({
   return (
     <div className="flex flex-col gap-2 min-h-0">
       <div>
-        <p className="text-sm font-semibold">Choose Specialization</p>
+        <p className="text-sm font-semibold">Szakosodás választása</p>
         <p className="text-xs opacity-80">
-          Pick one branch. Each card previews specialization spells from level 10 to 20.
+          Pick one branch. Each card previews specialization spells up to level {levelCap}.
         </p>
       </div>
       <div

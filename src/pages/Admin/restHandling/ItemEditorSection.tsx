@@ -84,7 +84,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
       <FlexRow className="w-full min-w-0 gap-1 flex-wrap items-start">
         <InputUnq
           id="item-name"
-          label="Item name"
+          label="Tárgy neve"
           value={props.name}
           onChange={(e) => props.setName(e.currentTarget.value)}
           className="min-w-0"
@@ -92,7 +92,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
         />
         <InputUnq
           id="item-sizex"
-          label="Size X"
+          label="Méret X"
           value={props.sizeX}
           onChange={(e) => props.setSizeX(e.currentTarget.value)}
           className="min-w-0"
@@ -100,7 +100,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
         />
         <InputUnq
           id="item-sizey"
-          label="Size Y"
+          label="Méret Y"
           value={props.sizeY}
           onChange={(e) => props.setSizeY(e.currentTarget.value)}
           className="min-w-0"
@@ -108,7 +108,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
         />
         <InputUnq
           id="item-weight"
-          label="Weight"
+          label="Teher"
           value={props.weight}
           onChange={(e) => props.setWeight(e.currentTarget.value)}
           className="min-w-0"
@@ -116,14 +116,14 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
         />
         <MoneyAddInput
           id="item-price"
-          label="Price"
+          label="Ár / érték"
           valueCopper={props.priceCopper}
           onChange={props.setPriceCopper}
           className="w-full sm:w-auto"
         />
         <InputUnq
           id="item-maxstack"
-          label="Max stack"
+          label="Max. köteg"
           value={isBagOrSatchel ? "1" : props.maxStack}
           onChange={(e) => props.setMaxStack(e.currentTarget.value)}
           disabled={isBagOrSatchel}
@@ -134,7 +134,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
 
       <TextAreaUnq
         id="item-description"
-        label="Description"
+        label="Leírás"
         value={props.description}
         onChange={(msg) => props.setDescription(msg)}
         className="w-full min-w-0"
@@ -144,7 +144,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
 
       <FlexRow className="w-full min-w-0 gap-1 flex-wrap items-start">
         <FieldCol>
-          <label className="mb-0.5">Equipable</label>
+          <label className="mb-0.5">Felszerelhető</label>
           <select
             className="text-black h-[26px] rounded px-1 w-full min-w-0"
             value={props.equipable}
@@ -154,7 +154,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
               )
             }
           >
-            <option value="">None</option>
+            <option value="">Nincs</option>
             {Object.values(Character.Item.ITEM_TYPE_EQUIPPABLE).map((slot) => (
               <option key={slot} value={slot}>
                 {slot}
@@ -163,7 +163,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
           </select>
         </FieldCol>
         <FieldCol>
-          <label className="mb-0.5">Consumable</label>
+          <label className="mb-0.5">Elfogyasztható</label>
           <input
             type="checkbox"
             checked={isBagOrSatchel ? false : props.consumable}
@@ -172,7 +172,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
           />
         </FieldCol>
         <FieldCol>
-          <label className="mb-0.5">Creates inventory space</label>
+          <label className="mb-0.5">Tárolóhelyet ad</label>
           <input
             type="checkbox"
             checked={isBagOrSatchel ? true : props.createsInventorySpace}
@@ -184,7 +184,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
           <>
             <InputUnq
               id="item-storage-sizex"
-              label="Storage X"
+              label="Tároló X"
               value={props.storageSizeX}
               onChange={(e) => props.setStorageSizeX(e.currentTarget.value)}
               className="min-w-0"
@@ -192,7 +192,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
             />
             <InputUnq
               id="item-storage-sizey"
-              label="Storage Y"
+              label="Tároló Y"
               value={props.storageSizeY}
               onChange={(e) => props.setStorageSizeY(e.currentTarget.value)}
               className="min-w-0"
@@ -212,7 +212,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
 
       <ImageUploadControl
         id="item-img-upload"
-        label="Item image"
+        label="Tárgy ikonja"
         value={props.imgMeta}
         fallbackSrc={props.img || "/imgs/item_default.svg"}
         onChange={(meta) => {
@@ -223,7 +223,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
 
       <FlexCol className="w-full min-w-0 gap-1 items-start">
         <div className="w-full min-w-0 fancy-container p-1">
-          <p className="mb-1 font-semibold text-sm">Item Aura</p>
+          <p className="mb-1 font-semibold text-sm">Tárgyaura</p>
           <label className="text-xs flex flex-col gap-0.5 mb-1">
             Apply when
             <select
@@ -236,8 +236,8 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
                 })
               }
             >
-              <option value="equipped">Equipped only</option>
-              <option value="carried">Carried or equipped</option>
+              <option value="equipped">Csak felszerelve</option>
+              <option value="carried">Hordva vagy felszerelve</option>
             </select>
           </label>
           <AuraEditor
@@ -271,7 +271,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
 
       <FlexRow className="w-full min-w-0 gap-1 flex-wrap items-start">
         <FieldCol>
-          <label className="mb-0.5">Primary stat</label>
+          <label className="mb-0.5">Elsődleges tulajdonság</label>
           <select
             className="text-black h-[26px] rounded px-1 w-full min-w-0"
             value={props.primaryStatName}
@@ -279,7 +279,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
               props.setPrimaryStatName((e.currentTarget.value as Character.PRIMARY_STATS | "") || "")
             }
           >
-            <option value="">None</option>
+            <option value="">Nincs</option>
             {Object.values(Character.PRIMARY_STATS).map((stat) => (
               <option key={stat} value={stat}>
                 {stat}
@@ -289,7 +289,7 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
         </FieldCol>
         <InputUnq
           id="item-primary-stat-value"
-          label="Primary value"
+          label="Elsődleges érték"
           value={props.primaryStatValue}
           onChange={(e) => props.setPrimaryStatValue(e.currentTarget.value)}
           className="min-w-0"
@@ -308,10 +308,10 @@ export default function ItemEditorSection(props: TItemEditorSectionProps) {
       />
 
       <FlexRow className="w-full min-w-0 gap-1 flex-wrap items-start">
-        <InputUnq id="item-hm-atk" label="HM ATK" value={props.hmAtk} onChange={(e) => props.setHmAtk(e.currentTarget.value)} className="min-w-0" widthOverride="w-full sm:w-28" />
-        <InputUnq id="item-hm-def" label="HM DEF" value={props.hmDef} onChange={(e) => props.setHmDef(e.currentTarget.value)} className="min-w-0" widthOverride="w-full sm:w-28" />
-        <InputUnq id="item-hm-aim" label="HM AIM" value={props.hmAim} onChange={(e) => props.setHmAim(e.currentTarget.value)} className="min-w-0" widthOverride="w-full sm:w-28" />
-        <InputUnq id="item-hm-ini" label="HM INI" value={props.hmIni} onChange={(e) => props.setHmIni(e.currentTarget.value)} className="min-w-0" widthOverride="w-full sm:w-28" />
+        <InputUnq id="item-hm-atk" label="HM TÉ" value={props.hmAtk} onChange={(e) => props.setHmAtk(e.currentTarget.value)} className="min-w-0" widthOverride="w-full sm:w-28" />
+        <InputUnq id="item-hm-def" label="HM VÉ" value={props.hmDef} onChange={(e) => props.setHmDef(e.currentTarget.value)} className="min-w-0" widthOverride="w-full sm:w-28" />
+        <InputUnq id="item-hm-aim" label="HM CÉ" value={props.hmAim} onChange={(e) => props.setHmAim(e.currentTarget.value)} className="min-w-0" widthOverride="w-full sm:w-28" />
+        <InputUnq id="item-hm-ini" label="HM KÉ" value={props.hmIni} onChange={(e) => props.setHmIni(e.currentTarget.value)} className="min-w-0" widthOverride="w-full sm:w-28" />
       </FlexRow>
 
       <FlexRow className="w-full min-w-0 gap-1 flex-wrap items-start">

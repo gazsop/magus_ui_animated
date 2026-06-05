@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Application, ServerApi, User } from "@shared/contracts";
 import { useDataContext } from "@/contexts/dataContext";
 import useRequest from "@/hooks/request";
-import { useAdventureSseSubscription } from "@/hooks/sse";
+import { useAdventureLiveEventSubscription } from "@/hooks/liveEvents";
 import { FlexRow } from "@components/Flex";
 
 const TILE_SIZE = 512;
@@ -340,6 +340,17 @@ export default function TileMap(props: {
     }
   }, [advId, user?.uid]);
 
+  const upsertMarker = useCallback((marker: ServerApi.YnevRoutes.Marker | null | undefined) => {
+    if (!marker?.id) return;
+    setMarkers((current) => {
+      const index = current.findIndex((entry) => entry.id === marker.id);
+      if (index < 0) return [...current, marker];
+      const next = [...current];
+      next[index] = marker;
+      return next;
+    });
+  }, []);
+
   const deleteMarker = useCallback(async (id: string) => {
     try {
       setMarkerStatus("Deleting marker...");
@@ -364,15 +375,13 @@ export default function TileMap(props: {
         body: { id },
         errorMode: "quiet",
       });
-      setMarkers((current) =>
-        current.map((marker) => (marker.id === id ? response.data.marker : marker))
-      );
+      upsertMarker(response.data.marker);
       setMarkerStatus("Marker is visible.");
     } catch {
       setMarkerStatus("Marker reveal failed.");
       void loadMarkers();
     }
-  }, [loadMarkers]);
+  }, [loadMarkers, upsertMarker]);
 
   const saveMarker = useCallback(async (
     scope: ServerApi.YnevRoutes.MarkerScope,
@@ -402,9 +411,9 @@ export default function TileMap(props: {
       },
       errorMode: "quiet",
     });
-    setMarkers((current) => [...current, response.data]);
+    upsertMarker(response.data);
     setMarkerStatus("Marker saved.");
-  }, [advId, latLngToSource]);
+  }, [advId, latLngToSource, upsertMarker]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -473,7 +482,7 @@ export default function TileMap(props: {
     void loadMarkers();
   }, [loadMarkers]);
 
-  useAdventureSseSubscription(
+  useAdventureLiveEventSubscription(
     "connected",
     advId,
     () => {
@@ -489,7 +498,7 @@ export default function TileMap(props: {
     return () => window.clearInterval(timer);
   }, [advId, loadMarkers, user?.uid]);
 
-  useAdventureSseSubscription<ServerApi.YnevRoutes.MarkerDeletedEvent>(
+  useAdventureLiveEventSubscription<ServerApi.YnevRoutes.MarkerDeletedEvent>(
     "ynev:markerDeleted",
     advId,
     (payload) => {
@@ -498,19 +507,13 @@ export default function TileMap(props: {
     }
   );
 
-  useAdventureSseSubscription<ServerApi.YnevRoutes.MarkerUpsertedEvent>(
+  useAdventureLiveEventSubscription<ServerApi.YnevRoutes.MarkerUpsertedEvent>(
     "ynev:markerUpserted",
     advId,
     (payload) => {
       const marker = payload.marker;
       if (!marker?.id || marker.scope !== "all" || marker.hidden) return;
-      setMarkers((current) => {
-        const index = current.findIndex((entry) => entry.id === marker.id);
-        if (index < 0) return [...current, marker];
-        const next = [...current];
-        next[index] = marker;
-        return next;
-      });
+      upsertMarker(marker);
     }
   );
 
@@ -772,7 +775,7 @@ export default function TileMap(props: {
       >
         <div
         ref={searchRef}
-        className="z-[1001] w-[min(280px,calc(100%-1rem))] text-xs"
+        className="relative z-[1001] w-[min(280px,calc(100%-1rem))] text-xs"
         onWheel={(event) => event.stopPropagation()}
         onMouseDown={(event) => event.stopPropagation()}
         onTouchStart={(event) => event.stopPropagation()}
@@ -780,12 +783,12 @@ export default function TileMap(props: {
         <input
           type="search"
           className="w-full px-2 py-1 rounded text-black"
-          placeholder="Search YNEV..."
+          placeholder="Kutatás Yneven..."
           value={search}
           onInput={(event) => setSearch(event.currentTarget.value)}
         />
         {searchResults.length > 0 ? (
-          <div className="mt-1 max-h-56 overflow-y-auto fancy-container bg-black/75">
+          <div className="absolute bottom-full left-0 z-[1003] mb-1 max-h-56 w-full overflow-y-auto fancy-container bg-black/85 shadow-lg">
             {searchResults.map((location) => (
               <button
                 key={`${location.html}-${location.x}-${location.y}`}
@@ -805,7 +808,7 @@ export default function TileMap(props: {
         <button
           type="button"
           disabled={!advId}
-          className={`px-2 py-1 rounded text-white ${armedScope === "self" ? "bg-blue-700" : "bg-blue-500"}`}
+          className={`px-2 py-1 rounded ${armedScope === "self" ? "bg-blue-700 text-cyan-200" : "bg-blue-500 text-white"}`}
           onClick={() => {
             if (!advId) {
               setMarkerStatus("Select an adventure before placing YNEV markers.");
@@ -823,7 +826,7 @@ export default function TileMap(props: {
         <button
           type="button"
           disabled={!advId}
-          className={`px-2 py-1 rounded text-white ${armedScope === "all" ? "bg-green-700" : "bg-green-500"}`}
+          className={`px-2 py-1 rounded ${armedScope === "all" ? "bg-green-700 text-lime-200" : "bg-green-500 text-white"}`}
           onClick={() => {
             if (!advId) {
               setMarkerStatus("Select an adventure before placing YNEV markers.");
@@ -896,7 +899,7 @@ export default function TileMap(props: {
           <textarea
             className="mb-2 h-20 w-full rounded p-2 text-black"
             value={markerComment}
-            placeholder="Comment"
+            placeholder="Megjegyzés"
             onInput={(event) => setMarkerComment(event.currentTarget.value)}
           />
           <FlexRow className="justify-end gap-2">
@@ -920,5 +923,6 @@ export default function TileMap(props: {
     </div>
   );
 }
+
 
 

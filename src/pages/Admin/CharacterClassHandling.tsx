@@ -344,7 +344,7 @@ const ClassHandlingWindow = ({
               />
               <InputUnq
                 id={`char-input-spell-${selectedSpell.id}`}
-                label="name"
+                label="név"
                 value={selectedSpell.name}
                 onBlur={(e) => {
                   const target = e.target as HTMLInputElement;
@@ -361,7 +361,7 @@ const ClassHandlingWindow = ({
               />
               <SelectUnq
                 id={`char-select-spec-${selectedSpell.id}`}
-                label="spec"
+                label="szakosodás"
                 optionData={[
                   {
                     value: "common",
@@ -429,7 +429,7 @@ const ClassHandlingWindow = ({
               />
               <InputUnq
                 id={`char-input-lvlReq-${selectedSpell.id}`}
-                label="lvlReq"
+                label="szintkövetelmény"
                 value={selectedSpell.lvlReq}
                 onInput={(e) => {
                   if (!isMouseDownRef.current) return;
@@ -458,7 +458,7 @@ const ClassHandlingWindow = ({
               />
               <InputUnq
                 id={`char-input-resourceCost-${selectedSpell.id}`}
-                label="resourceCost"
+                label="erőforrásköltség"
                 value={selectedSpell.resourceCost}
                 onInput={(e) => {
                   if (!isMouseDownRef.current) return;
@@ -486,7 +486,7 @@ const ClassHandlingWindow = ({
               />
               <InputUnq
                 id={`char-input-nrOfTurns-${selectedSpell.id}`}
-                label="nrOfTurns"
+                label="körök száma"
                 value={selectedSpell.nrOfTurns}
                 onInput={(e) => {
                   if (!isMouseDownRef.current) return;
@@ -515,7 +515,7 @@ const ClassHandlingWindow = ({
               />
               <InputUnq
                 id={`char-input-nrOfTurnsToCast-${selectedSpell.id}`}
-                label="nrOfTurnsToCast"
+                label="varázslási körök száma"
                 value={selectedSpell.nrOfTurnsToCast}
                 onInput={(e) => {
                   if (!isMouseDownRef.current) return;
@@ -544,7 +544,7 @@ const ClassHandlingWindow = ({
               />
               <InputUnq
                 id={`char-input-range-${selectedSpell.id}`}
-                label="range"
+                label="hatótáv"
                 value={selectedSpell.range || 0}
                 onInput={(e) => {
                   if (!isMouseDownRef.current) return;
@@ -572,7 +572,7 @@ const ClassHandlingWindow = ({
                 widthOverride="w-20"
               />
               <SelectUnq
-                label="SpellClass"
+                label="Varázslat típusa"
                 id={`char-select-class-${selectedSpell.id}`}
                 optionData={[
                   ...Object.keys(Character.Spell.SPELL_CLASSES).map((c) => ({
@@ -598,7 +598,7 @@ const ClassHandlingWindow = ({
               />
               <CheckBoxUnq
                 id={`char-input-passive-${selectedSpell.id}`}
-                label="passive"
+                label="passzív"
                 value={selectedSpell.passive}
                 onChange={(e) => {
                   const target = e.target as HTMLInputElement;
@@ -616,7 +616,7 @@ const ClassHandlingWindow = ({
               />
               <TextAreaUnq
                 id={`spell-list-description-${selectedSpell.id}`}
-                label="description"
+                label="leírás"
                 value={selectedSpell.description || ""}
                 onSave={(e) => {
                   const msg = e;
@@ -687,7 +687,7 @@ const ClassHandlingWindow = ({
 
       return (
         <FlexCol className="pb-10" id="spells">
-          <label>Spells</label>
+          <label>Varázslatok</label>
           <FlexCol>
             {selectedClass.spells &&
               selectedClass.spells.map((spell) => {
@@ -825,8 +825,8 @@ const ClassHandlingWindow = ({
 
     const Resource = () => {
       return (
-        <FlexCol className="grow">
-          <FlexRow>
+        <FlexCol className="grow shrink-0">
+          <FlexRow className="">
             <label htmlFor="">Név</label>
             <SelectUnq
               id={`char-select-resource-${selectedClass.id}`}
@@ -1048,12 +1048,11 @@ const ClassHandlingWindow = ({
         aditionalIcons={null}
         close={handleClose}
         label={`char_${"admin1"}`}
-        className="123asd"
       >
-        <FlexCol className="grow w-full shrink-0">
+        <FlexCol className="grow w-full shrink-0 overflow-auto h-full">
           <InputUnq
             id={`char-name-${selectedClass.id}`}
-            label="Name"
+            label="Név"
             value={selectedClass.name}
             disabled={true}
           />
@@ -1073,7 +1072,7 @@ const ClassHandlingWindow = ({
               });
             }}
             value={{
-              label: selectedClass.mainClass || "Select a class",
+              label: selectedClass.mainClass || "Kaszt kiválasztása",
               value: selectedClass.mainClass || ("0" as Character.MAIN_CLASSES),
             }}
           ></SelectUnq>
@@ -1115,7 +1114,8 @@ const ClassHandlingWindow = ({
               });
             }}
           />
-          <FlexRow>
+          <FlexCol className="grow shrink-0">
+            <FlexRow>
             <label className={`grow`}>HpPerLevel</label>
             <RollItem
               id={`char-roll-hp-${selectedClass.id}`}
@@ -1169,8 +1169,9 @@ const ClassHandlingWindow = ({
               });
             }}
           />
+          </FlexCol>
           <hr className="fancy" />
-          <FlexCol className="grow">
+          <FlexCol className="grow shrink-0">
             <label>HM</label>
             <InputUnq
               id={`char-input-atk-${selectedClass.id}`}
@@ -1344,70 +1345,72 @@ const ClassHandlingWindow = ({
             />
           </FlexCol>
           <hr className="fancy" />
-          {Object.values(Character.PRIMARY_STATS).map((stat) => {
-            return (
-              <FlexRow key={`primary-stat-${selectedClass.id}-${stat}`}>
-                <label className={`grow p-1`}>{stat}</label>
-                <RollItem
-                  id={`char-roll-${stat}-${selectedClass.id}`}
-                  addRoll={(roll) => {
-                    setSelectedClass((prev) => {
-                      const existingIndex = prev.modifiers.primaryStats.findIndex(
-                        (primaryStat) => primaryStat.name === stat
-                      );
-                      const primaryStats =
-                        existingIndex === -1
-                          ? [
-                              ...prev.modifiers.primaryStats,
-                              {
-                                name: stat,
-                                roll,
-                              },
-                            ]
-                          : prev.modifiers.primaryStats.map((primaryStat, index) =>
-                              index === existingIndex
-                                ? {
-                                    ...primaryStat,
-                                    roll,
-                                  }
-                                : primaryStat
-                            );
-                      return {
-                        ...prev,
-                        modifiers: {
-                          ...prev.modifiers,
-                          primaryStats,
-                        },
-                      };
-                    });
-                  }}
-                  buttonText="Set"
-                  initialValues={{
-                    nrOfRolls:
-                      selectedClass.modifiers.primaryStats.find(
+          <FlexCol className="grow shrink-0">
+            {Object.values(Character.PRIMARY_STATS).map((stat) => {
+              return (
+                <FlexRow key={`primary-stat-${selectedClass.id}-${stat}`}>
+                  <label className={`grow p-1`}>{stat}</label>
+                  <RollItem
+                    id={`char-roll-${stat}-${selectedClass.id}`}
+                    addRoll={(roll) => {
+                      setSelectedClass((prev) => {
+                        const existingIndex = prev.modifiers.primaryStats.findIndex(
+                          (primaryStat) => primaryStat.name === stat
+                        );
+                        const primaryStats =
+                          existingIndex === -1
+                            ? [
+                                ...prev.modifiers.primaryStats,
+                                {
+                                  name: stat,
+                                  roll,
+                                },
+                              ]
+                            : prev.modifiers.primaryStats.map((primaryStat, index) =>
+                                index === existingIndex
+                                  ? {
+                                      ...primaryStat,
+                                      roll,
+                                    }
+                                  : primaryStat
+                              );
+                        return {
+                          ...prev,
+                          modifiers: {
+                            ...prev.modifiers,
+                            primaryStats,
+                          },
+                        };
+                      });
+                    }}
+                    buttonText="Set"
+                    initialValues={{
+                      nrOfRolls:
+                        selectedClass.modifiers.primaryStats.find(
+                          (s) => s.name === stat
+                        )?.roll?.nrOfRolls || 1,
+                      nrOfDices:
+                        selectedClass.modifiers.primaryStats.find(
+                          (s) => s.name === stat
+                        )?.roll?.nrOfDices || 1,
+                      dice: (selectedClass.modifiers.primaryStats.find(
                         (s) => s.name === stat
-                      )?.roll?.nrOfRolls || 1,
-                    nrOfDices:
-                      selectedClass.modifiers.primaryStats.find(
-                        (s) => s.name === stat
-                      )?.roll?.nrOfDices || 1,
-                    dice: (selectedClass.modifiers.primaryStats.find(
-                      (s) => s.name === stat
-                    )?.roll?.dice || 6) as Adventure.DICE,
-                    constant:
-                      selectedClass.modifiers.primaryStats.find(
-                        (s) => s.name === stat
-                      )?.roll?.constant || 0,
-                  }}
-                />
-              </FlexRow>
-            );
-          })}
+                      )?.roll?.dice || 6) as Adventure.DICE,
+                      constant:
+                        selectedClass.modifiers.primaryStats.find(
+                          (s) => s.name === stat
+                        )?.roll?.constant || 0,
+                    }}
+                  />
+                </FlexRow>
+              );
+            })}
+          </FlexCol>
           <hr className="fancy" />
           <SecondaryStatScalings />
 
           <hr className="fancy" />
-          <FlexCol className="grow">
+          <FlexCol className="grow shrink-0">
             <label
               className="cursor-pointer select-none"
               onClick={() => setshowSecondaryStats((prev) => !prev)}
@@ -1422,7 +1425,7 @@ const ClassHandlingWindow = ({
             )}
           </FlexCol>
           <hr className="fancy" />
-          <FlexCol className="grow">
+          <FlexCol className="grow shrink-0">
             <label
               onClick={() => {
                 if (!specsMounted) setSpecsMounted(true);
@@ -1441,7 +1444,7 @@ const ClassHandlingWindow = ({
             )}
           </FlexCol>
           <hr className="fancy" />
-          <FlexCol className="grow">
+          <FlexCol className="grow shrink-0">
             <label
               onClick={() => {
                 if (!spellsMounted) setSpellsMounted(true);
@@ -1460,7 +1463,7 @@ const ClassHandlingWindow = ({
           <FlexCol className={`basis-1`}>
             <TextAreaUnq
               id="char-input-description"
-              label="Class description"
+              label="Kaszt leírása"
               value={selectedClass.description || ""}
               element="editor"
               onSave={(e) => {
@@ -1510,9 +1513,9 @@ export const AdminClassDescriptorWindow = ({
         id={`Class-${classId || "loading"}`}
         aditionalIcons={null}
         close={close}
-        label="Class"
+        label="Kaszt"
       >
-        <p className="p-2 text-sm opacity-70">Loading class...</p>
+        <p className="p-2 text-sm opacity-70">Kaszt betöltése...</p>
       </RndContainer>
     );
   }
@@ -1531,7 +1534,7 @@ function ClassHandling() {
       kind: "admin-class-editor",
       title: "Class",
       icon: "CL",
-      iconElement: <div>Class</div>,
+      iconElement: <div>Kaszt</div>,
       params: { classId },
     }));
   };
@@ -1541,7 +1544,7 @@ function ClassHandling() {
       <FlexCol className="w-full min-w-0 overflow-visible">
         <SelectUnq
           id="char-select-class"
-          label="Classes"
+          label="Kasztok"
           optionData={
             classList
               ? classList.map((c) => ({ value: c.id, label: c.name }))
@@ -1552,7 +1555,7 @@ function ClassHandling() {
             openClassWindow(e.value);
           }}
           value={{
-            label: "Select a class",
+            label: "Kaszt kiválasztása",
             value: "0" as Character.CLASSES,
           }}
         ></SelectUnq>

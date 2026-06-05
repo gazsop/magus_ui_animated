@@ -48,7 +48,7 @@ export function ErrorProvider(props: { children: JSX.Element | JSX.Element[] }) 
       void reportClientError({
         level: "error",
         context: "window.onerror",
-        message: event.message || "Unhandled window error",
+        message: event.message || "Elszabadult ablakhhiba",
         stack: event.error?.stack,
         meta: {
           filename: event.filename,
@@ -59,8 +59,8 @@ export function ErrorProvider(props: { children: JSX.Element | JSX.Element[] }) 
       if (import.meta.env.DEV) {
         setError((current) =>
           current
-            ? `${current}\n${event.message || "Unhandled window error"}`
-            : event.message || "Unhandled window error"
+            ? `${current}\n${event.message || "Elszabadult ablakhhiba"}`
+            : event.message || "Elszabadult ablakhhiba"
         );
       }
     };
@@ -105,7 +105,7 @@ export function ErrorProvider(props: { children: JSX.Element | JSX.Element[] }) 
       {error ? (
         <AppModal
           id="error-container"
-          label="Error"
+          label="Hiba"
           widthClass="w-[min(400px,95vw)]"
           actions={
             <button

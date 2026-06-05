@@ -2,7 +2,7 @@ import { Application } from "@shared/contracts";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import useRequest from "@hooks/request";
 import { useDataContext } from "@contexts/dataContext";
-import { useSseSubscription } from "@hooks/sse";
+import { useLiveEventSubscription } from "@hooks/liveEvents";
 import { CLIENT_DATETIME_DISPLAY_FORMAT, formatClientDateTime } from "@/core/datetime";
 import { API_BASE_URL } from "@/core/config/runtime";
 
@@ -13,9 +13,20 @@ type TNotesLock = {
   expiresAt: number;
 } | null;
 
+type TNoteEntry = {
+  id: string;
+  uid: string;
+  name: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+  revision: number;
+};
+
 type TAdventureNotes = {
   advId: string;
-  content: string;
+  entries: TNoteEntry[];
+  currentEntryId: string | null;
   revision: number;
   lastEditedByUid: string | null;
   lastEditedByName: string | null;
@@ -27,12 +38,24 @@ type TNotesMode = "shared" | "private";
 
 const emptyNotes = (advId: string): TAdventureNotes => ({
   advId,
-  content: "",
+  entries: [],
+  currentEntryId: null,
   revision: 0,
   lastEditedByUid: null,
   lastEditedByName: null,
   lastEditedAt: null,
   lock: null,
+});
+
+const normalizeNotes = (advId: string, value: Partial<TAdventureNotes> | null | undefined): TAdventureNotes => ({
+  advId: String(value?.advId || advId),
+  entries: Array.isArray(value?.entries) ? value.entries : [],
+  currentEntryId: value?.currentEntryId || null,
+  revision: Math.max(0, Number(value?.revision || 0)),
+  lastEditedByUid: value?.lastEditedByUid || null,
+  lastEditedByName: value?.lastEditedByName || null,
+  lastEditedAt: value?.lastEditedAt || null,
+  lock: value?.lock || null,
 });
 
 const modeConfig = (mode: TNotesMode) => {
@@ -49,87 +72,51 @@ const modeConfig = (mode: TNotesMode) => {
       mode === "private"
         ? "Select an adventure to use private notes."
         : "Select an adventure to use shared notes.",
-    placeholder: mode === "private" ? "Private adventure notes..." : "Shared adventure notes...",
+    placeholder: mode === "private" ? "Saját krónikajegyzetek..." : "Közös krónikajegyzetek...",
   };
 };
 
 const buildPrivateSaveUrl = () => `${API_BASE_URL}/adventures/notes/private/save`;
 
+const sameLock = (a: TNotesLock, b: TNotesLock) =>
+  (a?.uid || null) === (b?.uid || null) &&
+  (a?.name || null) === (b?.name || null) &&
+  (a?.acquiredAt || null) === (b?.acquiredAt || null) &&
+  (a?.expiresAt || null) === (b?.expiresAt || null);
+
+const sameEntries = (a: TNoteEntry[], b: TNoteEntry[]) =>
+  a.length === b.length &&
+  a.every((entry, index) => {
+    const other = b[index];
+    return (
+      other &&
+      entry.id === other.id &&
+      entry.uid === other.uid &&
+      entry.name === other.name &&
+      entry.content === other.content &&
+      entry.createdAt === other.createdAt &&
+      entry.updatedAt === other.updatedAt &&
+      entry.revision === other.revision
+    );
+  });
+
 const sameVisibleState = (a: TAdventureNotes, b: TAdventureNotes) =>
   a.advId === b.advId &&
-  a.content === b.content &&
+  a.currentEntryId === b.currentEntryId &&
   a.revision === b.revision &&
   a.lastEditedByUid === b.lastEditedByUid &&
   a.lastEditedByName === b.lastEditedByName &&
   a.lastEditedAt === b.lastEditedAt &&
-  (a.lock?.uid || null) === (b.lock?.uid || null) &&
-  (a.lock?.name || null) === (b.lock?.name || null) &&
-  (a.lock?.acquiredAt || null) === (b.lock?.acquiredAt || null) &&
-  (a.lock?.expiresAt || null) === (b.lock?.expiresAt || null);
+  sameLock(a.lock, b.lock) &&
+  sameEntries(a.entries, b.entries);
 
-const patchLock = (prev: TNotesLock, next: TNotesLock): TNotesLock => {
-  const prevUid = prev?.uid || null;
-  const nextUid = next?.uid || null;
-  const prevName = prev?.name || null;
-  const nextName = next?.name || null;
-  const prevAcquired = prev?.acquiredAt || null;
-  const nextAcquired = next?.acquiredAt || null;
-  const prevExpires = prev?.expiresAt || null;
-  const nextExpires = next?.expiresAt || null;
+const patchNotes = (prev: TAdventureNotes, next: TAdventureNotes): TAdventureNotes =>
+  sameVisibleState(prev, next) ? prev : next;
 
-  if (
-    prevUid === nextUid &&
-    prevName === nextName &&
-    prevAcquired === nextAcquired &&
-    prevExpires === nextExpires
-  ) {
-    return prev;
-  }
-  if (!next) return null;
-  return {
-    uid: next.uid,
-    name: next.name,
-    acquiredAt: next.acquiredAt,
-    expiresAt: next.expiresAt,
-  };
-};
-
-const patchNotes = (prev: TAdventureNotes, next: TAdventureNotes): TAdventureNotes => {
-  let changed = false;
-  let patched = prev;
-
-  if (prev.advId !== next.advId) {
-    patched = { ...patched, advId: next.advId };
-    changed = true;
-  }
-  if (prev.content !== next.content) {
-    patched = { ...patched, content: next.content };
-    changed = true;
-  }
-  if (prev.revision !== next.revision) {
-    patched = { ...patched, revision: next.revision };
-    changed = true;
-  }
-  if (prev.lastEditedByUid !== next.lastEditedByUid) {
-    patched = { ...patched, lastEditedByUid: next.lastEditedByUid };
-    changed = true;
-  }
-  if (prev.lastEditedByName !== next.lastEditedByName) {
-    patched = { ...patched, lastEditedByName: next.lastEditedByName };
-    changed = true;
-  }
-  if (prev.lastEditedAt !== next.lastEditedAt) {
-    patched = { ...patched, lastEditedAt: next.lastEditedAt };
-    changed = true;
-  }
-
-  const nextLock = patchLock(patched.lock, next.lock);
-  if (nextLock !== patched.lock) {
-    patched = { ...patched, lock: nextLock };
-    changed = true;
-  }
-
-  return changed ? patched : prev;
+const getEditableEntry = (notes: TAdventureNotes, uid: string | undefined) => {
+  if (!uid || !notes.currentEntryId) return null;
+  const entry = notes.entries.find((candidate) => candidate.id === notes.currentEntryId);
+  return entry?.uid === uid ? entry : null;
 };
 
 export default function SharedAdventureNotes({
@@ -160,6 +147,16 @@ export default function SharedAdventureNotes({
     [notes.lock?.uid, user?.uid]
   );
   const canEdit = isPrivate || isOwner;
+
+  const applyRemoteNotes = (nextRaw: Partial<TAdventureNotes> | null | undefined) => {
+    const next = normalizeNotes(advId, nextRaw);
+    setNotes((prev) => patchNotes(prev, next));
+    if (!dirtyRef.current || !canEdit) {
+      const editable = getEditableEntry(next, user?.uid);
+      setDraft(editable?.content || "");
+      setDirty(false);
+    }
+  };
 
   useEffect(() => {
     draftRef.current = draft;
@@ -194,12 +191,7 @@ export default function SharedAdventureNotes({
       endPoint: config.getEndpoint,
       body: { advId },
     })
-      .then((response) => {
-        const next = response.data || emptyNotes(advId);
-        setNotes((prev) => patchNotes(prev, next));
-        setDraft((prev) => (prev === (next.content || "") ? prev : next.content || ""));
-        setDirty(false);
-      })
+      .then((response) => applyRemoteNotes(response.data))
       .catch(() => {})
       .finally(() => setLoading(false));
   };
@@ -212,9 +204,10 @@ export default function SharedAdventureNotes({
       body: { advId, content: draft },
     })
       .then((response) => {
-        const next = response.data || emptyNotes(advId);
-        setNotes((prev) => (sameVisibleState(prev, next) ? prev : next));
-        setDraft(next.content || "");
+        const next = normalizeNotes(advId, response.data);
+        setNotes((prev) => patchNotes(prev, next));
+        const editable = getEditableEntry(next, user?.uid);
+        setDraft(editable?.content || "");
         setDirty(false);
       })
       .catch(() => {})
@@ -229,8 +222,11 @@ export default function SharedAdventureNotes({
       body: { advId },
     })
       .then((response) => {
-        const next = response.data || emptyNotes(advId);
+        const next = normalizeNotes(advId, response.data);
         setNotes((prev) => patchNotes(prev, next));
+        const editable = getEditableEntry(next, user?.uid);
+        setDraft(editable?.content || "");
+        setDirty(false);
       })
       .catch(() => {})
       .finally(() => setBusy(false));
@@ -244,8 +240,9 @@ export default function SharedAdventureNotes({
       body: { advId },
     })
       .then((response) => {
-        const next = response.data || emptyNotes(advId);
-        setNotes((prev) => patchNotes(prev, next));
+        applyRemoteNotes(response.data);
+        setDraft("");
+        setDirty(false);
       })
       .catch(() => {})
       .finally(() => setBusy(false));
@@ -289,10 +286,7 @@ export default function SharedAdventureNotes({
         endPoint: config.heartbeatEndpoint,
         body: { advId },
       })
-        .then((response) => {
-          const next = response.data || emptyNotes(advId);
-          setNotes((prev) => patchNotes(prev, next));
-        })
+        .then((response) => applyRemoteNotes(response.data))
         .catch(() => {});
     }, 25_000);
     return () => {
@@ -315,26 +309,16 @@ export default function SharedAdventureNotes({
     };
   }, [isPrivate]);
 
-  useSseSubscription(config.updatedEvent, (event) => {
-    if (event.scope !== "adventure") return;
+  useLiveEventSubscription(config.updatedEvent, (event) => {
     const payload = (event.payload || {}) as TAdventureNotes;
     if (!payload?.advId || payload.advId !== advId) return;
-    setNotes((prev) => patchNotes(prev, payload));
-    if (!dirty || !canEdit) {
-      setDraft(payload.content || "");
-      setDirty(false);
-    }
+    applyRemoteNotes(payload);
   });
 
-  useSseSubscription(config.lockEvent, (event) => {
-    if (event.scope !== "adventure") return;
+  useLiveEventSubscription(config.lockEvent, (event) => {
     const payload = (event.payload || {}) as TAdventureNotes;
     if (!payload?.advId || payload.advId !== advId) return;
-    setNotes((prev) => {
-      const nextLock = patchLock(prev.lock, payload.lock);
-      if (nextLock === prev.lock) return prev;
-      return { ...prev, lock: nextLock };
-    });
+    applyRemoteNotes(payload);
   });
 
   if (!advId) {
@@ -346,28 +330,28 @@ export default function SharedAdventureNotes({
   }
 
   return (
-    <div className="w-full h-full min-h-0 p-2 flex flex-col gap-2 overflow-auto">
-      <div className="fancy-container p-2 text-xs">
+    <div className="w-full h-full min-h-0 p-2 flex flex-col gap-2 overflow-hidden">
+      <div className="fancy-container p-2 text-xs shrink-0">
         {!isPrivate ? (
           <p>
-            Edit lock:{" "}
+            Szerkesztés:{" "}
             <span className="font-bold">
-              {notes.lock ? `${notes.lock.name} (${notes.lock.uid})` : "free"}
+              {notes.lock ? `${notes.lock.name} (${notes.lock.uid})` : "szabad"}
             </span>
           </p>
         ) : null}
         <p>
-          Last edit ({CLIENT_DATETIME_DISPLAY_FORMAT}):{" "}
+          Utolsó mentés ({CLIENT_DATETIME_DISPLAY_FORMAT}):{" "}
           <span className="font-bold">
             {notes.lastEditedByName || "-"} | {formatClientDateTime(notes.lastEditedAt)}
           </span>
         </p>
         <p>
-          Revision: <span className="font-bold">{notes.revision || 0}</span>
+          Verzió: <span className="font-bold">{notes.revision || 0}</span>
         </p>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap shrink-0">
         {!isPrivate ? (
           <>
             <button
@@ -375,14 +359,14 @@ export default function SharedAdventureNotes({
               onClick={takeLock}
               disabled={busy || isOwner || (!!notes.lock && notes.lock.uid !== user?.uid)}
             >
-              Take Edit
+              Szerkesztés átvétele
             </button>
             <button
               className="fancy-container px-2 py-1"
               onClick={releaseLock}
               disabled={busy || !isOwner}
             >
-              Release
+              Elengedés
             </button>
           </>
         ) : null}
@@ -391,12 +375,28 @@ export default function SharedAdventureNotes({
           onClick={saveNotes}
           disabled={busy || !canEdit || !dirty}
         >
-          Save now
+          Mentés
         </button>
       </div>
 
+      <div className="min-h-0 grow overflow-y-auto flex flex-col gap-2 pr-1">
+        {notes.entries.length < 1 ? (
+          <p className="text-sm opacity-75">Nincs bejegyzés.</p>
+        ) : null}
+        {notes.entries.map((entry) => (
+          <article key={entry.id} className="fancy-container p-2 text-sm">
+            <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs opacity-80">
+              <span className="font-bold">{entry.name || entry.uid}</span>
+              <span>{formatClientDateTime(entry.updatedAt || entry.createdAt)}</span>
+              {entry.revision > 1 ? <span>szerkesztve: {entry.revision}</span> : null}
+            </div>
+            <p className="mt-1 whitespace-pre-wrap break-words">{entry.content}</p>
+          </article>
+        ))}
+      </div>
+
       <textarea
-        className="grow min-h-0 w-full fancy-container p-2 text-black"
+        className="h-36 shrink-0 w-full fancy-container p-2 text-black"
         value={draft}
         onInput={(e) => {
           const value = (e.currentTarget as HTMLTextAreaElement).value;
@@ -404,7 +404,7 @@ export default function SharedAdventureNotes({
           setDirty(true);
         }}
         readOnly={!canEdit}
-        placeholder={loading ? "Loading notes..." : config.placeholder}
+        placeholder={loading ? "Jegyzetek betöltése..." : config.placeholder}
       />
     </div>
   );

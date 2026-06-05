@@ -11,6 +11,7 @@ import {
 } from "@/windows/windowTypes";
 import {
   buildInitialWindowState,
+  getRegistrationName,
   getVisibleWindows,
   windowsReducer,
 } from "@/windows/windowState";
@@ -87,38 +88,61 @@ export const WindowsLayerProvider = (props: {
   shortcuts?: IWindowsLayerShortcut[];
   onlineUsers?: IOnlineUserBadge[];
   currentPage: PageState;
+  blockedWindowNames?: string[];
 }) => {
+  const blockedWindowNames = props.blockedWindowNames ?? [];
+  const blockedWindowNameSet = useMemo(
+    () => new Set(blockedWindowNames),
+    [blockedWindowNames]
+  );
   const [pinnedWindowRecords, setPinnedWindowRecords] = useState(() =>
-    readPinnedWindowRecords()
+    readPinnedWindowRecords().filter((record) => !blockedWindowNameSet.has(record.name))
+  );
+  const initialPinnedWindowRecords = useMemo(
+    () => readPinnedWindowRecords().filter((record) => !blockedWindowNameSet.has(record.name)),
+    [blockedWindowNameSet]
+  );
+  const registeredWindows = useMemo(
+    () =>
+      (props.windows ?? []).filter(
+        (windowElem) => !blockedWindowNameSet.has(getRegistrationName(windowElem))
+      ),
+    [props.windows, blockedWindowNameSet]
   );
   const [state, dispatch] = useReducer(
     windowsReducer,
     null,
-    () => buildInitialWindowState(props.windows ?? [], readPinnedWindowRecords())
+    () => buildInitialWindowState(registeredWindows, initialPinnedWindowRecords)
   );
 
   const visibleWindows = useMemo(
-    () => getVisibleWindows(state, props.currentPage),
-    [state, props.currentPage]
+    () =>
+      getVisibleWindows(state, props.currentPage).filter(
+        (windowElem) => !blockedWindowNameSet.has(windowElem.name)
+      ),
+    [state, props.currentPage, blockedWindowNameSet]
   );
 
   const addWindow = useCallback((windowElem: IWindowsLayerWindowProps) => {
+    if (blockedWindowNameSet.has(getRegistrationName(windowElem))) return;
     dispatch({
       type: "register",
       window: windowElem,
       pinnedRecords: pinnedWindowRecords,
     });
-  }, [pinnedWindowRecords]);
+  }, [blockedWindowNameSet, pinnedWindowRecords]);
 
   const removeWindow = useCallback((windowName: string) => {
     dispatch({ type: "close", name: windowName });
   }, []);
 
   const updateWindow = useCallback((windowName: string, windowElem: IWindowsLayerWindowProps) => {
+    if (blockedWindowNameSet.has(windowName)) return;
     dispatch({ type: "update", name: windowName, window: windowElem });
-  }, []);
+  }, [blockedWindowNameSet]);
 
   const toggleWindow = useCallback((windowName: string, fallbackWindow?: IWindowsLayerWindowProps) => {
+    if (blockedWindowNameSet.has(windowName)) return;
     const current = state.windows.find((windowElem) => windowElem.name === windowName);
     if (current) {
       dispatch({ type: "toggle", name: windowName });
@@ -131,7 +155,7 @@ export const WindowsLayerProvider = (props: {
       pinnedRecords: pinnedWindowRecords,
       openOnRegister: true,
     });
-  }, [pinnedWindowRecords, state.windows]);
+  }, [blockedWindowNameSet, pinnedWindowRecords, state.windows]);
 
   const minimizeWindow = useCallback((name: string) => {
     dispatch({ type: "minimize", name });
@@ -142,15 +166,17 @@ export const WindowsLayerProvider = (props: {
   }, []);
 
   const toggleOrOpenWindow = useCallback((name: string, fallbackOpen?: () => void) => {
+    if (blockedWindowNameSet.has(name)) return;
     const current = visibleWindows.find((windowElem) => windowElem.name === name);
     if (!current) {
       fallbackOpen?.();
       return;
     }
     dispatch({ type: current.isOpen ? "toggle" : "open", name });
-  }, [visibleWindows]);
+  }, [blockedWindowNameSet, visibleWindows]);
 
   const togglePinnedWindow = useCallback((name: string) => {
+    if (blockedWindowNameSet.has(name)) return;
     setPinnedWindowRecords((prev) => {
       const current = state.windows.find((windowElem) => windowElem.name === name);
       const existing = prev.some((entry) => entry.name === name);
@@ -171,14 +197,24 @@ export const WindowsLayerProvider = (props: {
       dispatch({ type: "applyPinned", pinnedRecords: next });
       return next;
     });
-  }, [state.windows]);
+  }, [blockedWindowNameSet, state.windows]);
+
+  useEffect(() => {
+    setPinnedWindowRecords((prev) => {
+      const next = prev.filter((record) => !blockedWindowNameSet.has(record.name));
+      if (next.length === prev.length) return prev;
+      writePinnedWindowRecords(next);
+      dispatch({ type: "applyPinned", pinnedRecords: next });
+      return next;
+    });
+  }, [blockedWindowNameSet]);
 
   useEffect(() => {
     dispatch({ type: "applyPinned", pinnedRecords: pinnedWindowRecords });
   }, [pinnedWindowRecords]);
 
   useEffect(() => {
-    (props.windows ?? []).forEach((windowElem) => {
+    registeredWindows.forEach((windowElem) => {
       dispatch({
         type: "register",
         window: windowElem,
@@ -187,7 +223,7 @@ export const WindowsLayerProvider = (props: {
         openOnRegister: false,
       });
     });
-  }, [props.windows, pinnedWindowRecords]);
+  }, [registeredWindows, pinnedWindowRecords]);
 
   useEffect(() => {
     dispatch({ type: "applyPage", currentPage: props.currentPage });

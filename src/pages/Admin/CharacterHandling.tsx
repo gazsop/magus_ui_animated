@@ -88,7 +88,7 @@ function CharacterHandling({ advId }: { advId: string }) {
       <FlexCol>
         <SelectUnq
           id={"charSelect"}
-          label={"Characters"}
+          label={"Karakterek"}
           optionData={
             hasCharacters
               ? characters.map((char, index) => ({

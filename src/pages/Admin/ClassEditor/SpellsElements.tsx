@@ -55,7 +55,7 @@ const DescriptionElement = memo(function ({
             setDescriptionOpen((prev) => !prev);
           }}
         />
-        <label htmlFor="">description</label>
+        <label htmlFor="">leírás</label>
       </FlexRow>
 
       {descriptionOpen ? (
@@ -132,7 +132,7 @@ export const SpellsElement = memo(function ({
       >
         <InputUnq
           id={`char-input-rank-${spellState.id}`}
-          label="rank"
+          label="rang"
           value={"rank" in spellState && spellState.rank ? spellState.rank : 1}
           widthOverride="w-24"
           layout="flex-col"
@@ -158,7 +158,7 @@ export const SpellsElement = memo(function ({
         />
         <InputUnq
           id={`char-input-spell-${spellState.id}`}
-          label="name"
+          label="név"
           value={spellState.name}
           layout="flex-col"
           widthOverride="w-24"
@@ -170,7 +170,7 @@ export const SpellsElement = memo(function ({
         />
         <SelectUnq
           id={`char-select-spec-${spellState.id}`}
-          label="spec"
+          label="szakosodás"
           optionData={[
             { value: "common", label: "common" },
             ...specs.map((c) => ({ value: c.name, label: c.name })),
@@ -188,7 +188,7 @@ export const SpellsElement = memo(function ({
         />
         <SelectUnq
           id={`char-select-type-${spellState.id}`}
-          label="type"
+          label="típus"
           optionData={[
             { value: "damage", label: "damage" },
             { value: "heal", label: "heal" },
@@ -204,7 +204,7 @@ export const SpellsElement = memo(function ({
         />
         <InputUnq
           id={`char-input-lvlReq-${spellState.id}`}
-          label="lvlReq"
+          label="szintkövetelmény"
           value={spellState.lvlReq}
           type="number"
           layout="flex-col"
@@ -217,7 +217,7 @@ export const SpellsElement = memo(function ({
         />
         <InputUnq
           id={`char-input-resourceCost-${spellState.id}`}
-          label="resourceCost"
+          label="erőforrásköltség"
           value={spellState.resourceCost}
           type="number"
           onBlur={(e) => {
@@ -230,7 +230,7 @@ export const SpellsElement = memo(function ({
         />
         <InputUnq
           id={`char-input-nrOfTurnsToCast-${spellState.id}`}
-          label="nrOfTurnsToCast"
+          label="varázslási körök száma"
           value={spellState.nrOfTurnsToCast}
           type="number"
           onBlur={(e) => {
@@ -243,7 +243,7 @@ export const SpellsElement = memo(function ({
         />
         <InputUnq
           id={`char-input-nrOfTurns-${spellState.id}`}
-          label="nrOfTurns"
+          label="körök száma"
           value={spellState.nrOfTurns}
           type="number"
           onBlur={(e) => {
@@ -256,7 +256,7 @@ export const SpellsElement = memo(function ({
         />
         <InputUnq
           id={`char-input-range-${spellState.id}`}
-          label="range"
+          label="hatótáv"
           value={spellState.range}
           type="number"
           onBlur={(e) => {
@@ -269,7 +269,7 @@ export const SpellsElement = memo(function ({
         />
         <SelectUnq
           id={`char-select-class-${spellState.id}`}
-          label="SpellClass"
+          label="Varázslat típusa"
           optionData={Object.keys(Character.Spell.SPELL_CLASSES).map((c) => ({
             value: c,
             label: c,
@@ -284,7 +284,7 @@ export const SpellsElement = memo(function ({
         />
         <CheckBoxUnq
           id={`char-input-passive-${spellState.id}`}
-          label="passive"
+          label="passzív"
           value={spellState.passive}
           onChange={(e) => {
             const target = e.target as HTMLInputElement;

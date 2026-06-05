@@ -164,7 +164,7 @@ const DescentHandlingWindow = ({
     })
       .then((response) => {
         setClassList([
-          { id: "0", name: "Select a class" as Character.CLASSES },
+          { id: "0", name: "Kaszt kiválasztása" as Character.CLASSES },
           ...response.data,
         ]);
       })
@@ -183,7 +183,7 @@ const DescentHandlingWindow = ({
       <FlexCol className="grow w-full gap-1 overflow-auto">
         <InputUnq
           id={`DescentHandling-${selectedDescent.id}-name`}
-          label="Name"
+          label="Név"
           value={selectedDescent.name || ""}
           disabled={true}
         />
@@ -304,7 +304,7 @@ const DescentHandlingWindow = ({
         />
         <TextAreaUnq
           id={`DescentHandling-${selectedDescent.id}-description`}
-          label="Description"
+          label="Leírás"
           value={selectedDescent.description}
           onSave={(msg) => {
             setSelectedDescent((prev) => ({ ...prev, description: msg }));
@@ -346,9 +346,9 @@ export const AdminDescentDescriptorWindow = ({
         id={`DescentHandling-${descentId || "loading"}`}
         aditionalIcons={null}
         close={close}
-        label="Descent"
+        label="Származás"
       >
-        <p className="p-2 text-sm opacity-70">Loading descent...</p>
+        <p className="p-2 text-sm opacity-70">Származás betöltése...</p>
       </RndContainer>
     );
   }
@@ -365,7 +365,7 @@ function DescentHandling() {
     windowsLayer.addWindow(defineWindowRegistration({
       id: windowName,
       kind: "admin-descent-editor",
-      title: "Descent",
+      title: "Származás",
       icon: "DH",
       params: { descentId },
     }));
@@ -375,14 +375,14 @@ function DescentHandling() {
     <FlexCol className="w-full min-w-0 overflow-hidden">
       <SelectUnq
         id="DescentHandling-list"
-        label="Descents"
+        label="Származások"
         optionData={descentList ? descentList.map((c) => ({ value: c.id, label: c.name })) : []}
         onChange={(e) => {
           if (!e) return;
           openDescentWindow(e.value);
         }}
         value={{
-          label: "Select a descent",
+          label: "Származás kiválasztása",
           value: "0" as Character.DESCENTS,
         }}
       />

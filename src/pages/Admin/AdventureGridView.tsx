@@ -1,7 +1,6 @@
-import { Adventure, Character, Application, ServerApi, Vendor } from "@shared/contracts";
-import { createPortal, useEffect, useRef, useState } from "preact/compat";
+﻿import { Adventure, Character, Application, Combat, ServerApi, Vendor } from "@shared/contracts";
+import { createPortal, useEffect, useMemo, useRef, useState } from "preact/compat";
 import {
-  applySecondaryStatPoints,
   copperToInventoryMoney,
   copperToMoneyBreakdown,
   inventoryMoneyToCopper,
@@ -9,20 +8,29 @@ import {
 } from "@shared/game";
 import useRequest from "@hooks/request";
 import useError from "@hooks/error";
-import { useAdventureSseSubscription, useSyncStatusSubscription } from "@hooks/sse";
-import { useSseContext } from "@contexts/sseContext";
+import { useAdventureLiveEventSubscription, useSyncStatusSubscription } from "@hooks/liveEvents";
+import { useLiveEventsContext } from "@contexts/liveEventsContext";
 import { useWindowsLayer } from "@pages/WindowsLayer";
 import AuraEditor, { createEmptyAuraEditorDraft, TAuraEditorDraft } from "@components/AuraEditor";
 import AuraDisplay from "@components/AuraDisplay";
 import RndContainer from "@components/RndContainer";
 import ItemHoverCard from "@components/ItemHoverCard";
-import SecondaryStatsTable from "@components/SecondaryStatsTable";
 import { FlexRow } from "@components/Flex";
 import { isConflictError } from "@/core/api/httpClient";
 import { buildTopLevelDiffPatch } from "@/core/api/patch";
 import { useDataContext } from "@contexts/dataContext";
 import { formatClientDateTime } from "@/core/datetime";
 import { parseCharacterPayload } from "@pages/Character/utils/characterPayload";
+import CharacterSpellsPanel from "@pages/Character/components/CharacterSpellsPanel";
+import CharacterSecondarySkillsPanel from "@pages/Character/components/CharacterSecondarySkillsPanel";
+import useAurasAndDamagePanel from "@pages/Character/components/CharacterAurasAndDamage";
+import { PageState } from "@/app/navigation";
+import {
+  registerWindowDescriptorRenderer,
+  TWindowDescriptorRenderer,
+  unregisterWindowDescriptorRenderer,
+} from "@/windows/windowDescriptorRenderers";
+import { defineWindowRegistration } from "@/windows/windowFactory";
 import {
   MoneyAddInput,
   MoneyDisplay,
@@ -69,10 +77,46 @@ const ADMIN_EQUIPMENT_SLOT_IDS = [
   "satchel",
 ] as const;
 
-const clampInt = (value: number, min: number, max: number) => {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, Math.floor(value)));
+const computeSpellVisibilityCap = (level: number): number => {
+  const safeLevel = Math.max(1, Math.floor(Number(level || 1)));
+  if (safeLevel < 10) return 10;
+  return Math.min(99, (Math.floor(safeLevel / 10) + 1) * 10);
 };
+
+const buildAdminCharacterSubWindow = ({
+  advId,
+  uid,
+  kind,
+  title,
+  icon,
+}: {
+  advId: string;
+  uid: string;
+  kind: string;
+  title: string;
+  icon: string;
+}) => defineWindowRegistration({
+  id: `${kind}-${advId}-${uid}`,
+  kind,
+  title,
+  icon,
+  params: { advId, uid },
+  defaultOpen: true,
+  allowedPages: [PageState.CHAR_SHEET],
+  keepStateAcrossPages: true,
+  launcherVisible: false,
+});
+
+function AdminCharacterDamagePanel({
+  character,
+  onSave,
+}: {
+  character: Character.TCharacter;
+  onSave: (nextCharacter: Character.TCharacter) => Promise<void>;
+}) {
+  const { damagesPanel } = useAurasAndDamagePanel({ character, onSave });
+  return damagesPanel;
+}
 
 const parsePathTokens = (path: string): Array<string | number> =>
   String(path || "")
@@ -133,7 +177,7 @@ const setByPath = (root: unknown, path: string, value: unknown): boolean => {
 
 export default function AdventureGridView({ advId = "" }: { advId?: string }) {
   const { addWindow, updateWindow } = useWindowsLayer();
-  const { setSyncSnapshot } = useSseContext();
+  const { setSyncSnapshot } = useLiveEventsContext();
   const { classes, descents } = useDataContext();
   const {
     characters,
@@ -146,10 +190,17 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
     setCharacterDataRenderer,
   } = useAdminAdventureCharacters();
   const [religions, setReligions] = useState<TNamedValue[]>([]);
-  const [personalities, setPersonalities] = useState<TNamedValue[]>([]);
   const [combatMode, setCombatMode] = useState(false);
   const [turn, setTurn] = useState(1);
   const [combatInitiatives, setCombatInitiatives] = useState<Adventure.TCombatInitiative[]>([]);
+  const [npcManageTargetUid, setNpcManageTargetUid] = useState("");
+  const [npcDamageValue, setNpcDamageValue] = useState(0);
+  const [npcHealHpValue, setNpcHealHpValue] = useState(0);
+  const [npcHealEpValue, setNpcHealEpValue] = useState(0);
+  const [npcResourceDeltaValue, setNpcResourceDeltaValue] = useState(0);
+  const [npcManageBusy, setNpcManageBusy] = useState(false);
+  const [combats, setCombats] = useState<Combat.TCombat[]>([]);
+  const [selectedCombatId, setSelectedCombatId] = useState("");
   const [vendors, setVendors] = useState<Vendor.TVendor[]>([]);
   const [vendorState, setVendorState] = useState<Vendor.TVendorState | null>(null);
   const [selectedVendorId, setSelectedVendorId] = useState("");
@@ -222,6 +273,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
     const serverTurn = Math.max(0, Number(state?.turn || 0));
     setCombatMode(enabled);
     setTurn(enabled ? Math.max(1, serverTurn || 1) : 1);
+    if (enabled && state?.combatId) setSelectedCombatId(String(state.combatId));
     setCombatInitiatives(enabled && Array.isArray(state?.initiatives) ? state.initiatives : []);
   };
 
@@ -335,9 +387,13 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
 
   const setCombatEnabled = (enabled: boolean) => {
     if (!advId) return;
+    if (enabled && !selectedCombatId) {
+      setError("Select a combat first.");
+      return;
+    }
     requestAdventure<Adventure.TCombatState>({
       endPoint: "/combat/set",
-      body: { advId, enabled, turn: enabled ? 1 : 0 },
+      body: { advId, enabled, turn: enabled ? 1 : 0, combatId: enabled ? selectedCombatId : undefined },
     })
       .then((response) => {
         applyCombatState(response.data);
@@ -402,6 +458,44 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
       .catch((error) => {
         setError("Failed to advance combat turn: " + error);
       });
+  };
+
+  const npcManageTarget = combatInitiatives.find((row) => row.uid === npcManageTargetUid && row.kind === "npc") || null;
+
+  const openNpcManageModal = (row: Adventure.TCombatInitiative) => {
+    setNpcManageTargetUid(row.uid);
+    setNpcDamageValue(0);
+    setNpcHealHpValue(0);
+    setNpcHealEpValue(0);
+    setNpcResourceDeltaValue(0);
+  };
+
+  const applyNpcResourceAction = async (
+    action: ServerApi.AdventureRoutes.CombatNpcResourceAction,
+    amount: number
+  ) => {
+    if (!advId || !npcManageTarget || npcManageBusy) return;
+    setNpcManageBusy(true);
+    try {
+      const response = await requestAdventure<Adventure.TCombatState, ServerApi.AdventureRoutes.UpdateCombatNpcResourceBody>({
+        endPoint: "/combat/npc/resource",
+        body: {
+          advId,
+          npcUid: npcManageTarget.uid,
+          action,
+          amount,
+        },
+      });
+      applyCombatState(response.data);
+      if (action === "damage") setNpcDamageValue(0);
+      if (action === "healHp") setNpcHealHpValue(0);
+      if (action === "healEp") setNpcHealEpValue(0);
+      if (action === "resourceDelta") setNpcResourceDeltaValue(0);
+    } catch (error) {
+      setError("Failed to update NPC resources: " + error);
+    } finally {
+      setNpcManageBusy(false);
+    }
   };
 
   const openGiveXpModal = () => {
@@ -509,9 +603,6 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
     requestRest<{ entries: TNamedValue[] }>({ endPoint: "getAllReligions", errorMode: "quiet" })
       .then((response) => setReligions(response.data?.entries || []))
       .catch(() => setReligions([]));
-    requestRest<{ entries: TNamedValue[] }>({ endPoint: "getAllPersonalities", errorMode: "quiet" })
-      .then((response) => setPersonalities(response.data?.entries || []))
-      .catch(() => setPersonalities([]));
     requestRest<{ vendors: Vendor.TVendor[]; hash?: string }>({ endPoint: "/getAllVendors", errorMode: "quiet" })
       .then((response) => {
         setVendors(response.data?.vendors || []);
@@ -520,6 +611,14 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
         }
       })
       .catch(() => setVendors([]));
+    requestRest<{ combats: Combat.TCombat[]; hash?: string }>({ endPoint: "/getAllCombats", errorMode: "quiet" })
+      .then((response) => {
+        setCombats(response.data?.combats || []);
+        if (!selectedCombatId && response.data?.combats?.[0]) {
+          setSelectedCombatId(response.data.combats[0].id);
+        }
+      })
+      .catch(() => setCombats([]));
   }, []);
 
   useEffect(() => {
@@ -550,7 +649,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
     });
   }, [advId]);
 
-  useAdventureSseSubscription(
+  useAdventureLiveEventSubscription(
     "combat:state",
     advId,
     (payload: {
@@ -562,11 +661,11 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
       applyCombatState(payload);
     }
   );
-  useAdventureSseSubscription("vendor:state", advId, (payload: Vendor.TVendorState) => {
+  useAdventureLiveEventSubscription("vendor:state", advId, (payload: Vendor.TVendorState) => {
     setVendorState(payload);
     setSelectedVendorId(String(payload.vendorId || selectedVendorId || ""));
   });
-  useAdventureSseSubscription(
+  useAdventureLiveEventSubscription(
     "vendor:tradeRequested",
     advId,
     (payload: { vendor?: Vendor.TVendorState; trade?: Vendor.TVendorTrade }) => {
@@ -579,7 +678,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
       }
     }
   );
-  useAdventureSseSubscription(
+  useAdventureLiveEventSubscription(
     "vendor:tradeResolved",
     advId,
     (payload: { vendor?: Vendor.TVendorState }) => {
@@ -721,6 +820,119 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
     });
   };
 
+  const grantXpToCharacter = async (
+    entry: CharacterIdentity,
+    xpDelta: number,
+    overrideCharacter?: Character.TCharacter | null
+  ) => {
+    const amount = Math.floor(Number(xpDelta || 0));
+    if (!advId || !entry.full || amount === 0 || xpBusy) return;
+    try {
+      setXpBusy(true);
+      const response = await requestCharacters<Character.TCharacterServer>({
+        endPoint: "/grantXp",
+        body: {
+          uid: entry.id,
+          advId,
+          xpDelta: amount,
+        },
+      });
+      const parsed = parseCharacterPayload(response.data);
+      if (!parsed.json) return;
+      const row = response.data as { hash?: string };
+      const nextEntry = commitUpdatedCharacter(
+        entry,
+        parsed.json,
+        parsed.computed,
+        row.hash
+      );
+      openCharacterDataWindow(nextEntry, parsed.json || overrideCharacter);
+      setXpByUid((prev) => ({ ...prev, [entry.id]: 0 }));
+    } catch (error) {
+      setError("Failed to give XP: " + error);
+    } finally {
+      setXpBusy(false);
+    }
+  };
+
+  const getVisibleSpellsForCharacter = (character: Character.TCharacter | null | undefined) => {
+    const classDef = classes.find((x) => x.name === String(character?.class || ""));
+    const levelCap = computeSpellVisibilityCap(character?.level?.current || 1);
+    const activeSpecialization = String(character?.rp?.specialization || "").trim().toLowerCase();
+    return (classDef?.spells || [])
+      .filter((spell) => Number(spell.lvlReq || 0) <= levelCap)
+      .filter((spell) => {
+        const spec = String(spell.spec || "").trim().toLowerCase();
+        if (!spec || spec === "common") return true;
+        if (!activeSpecialization) return false;
+        return spec === activeSpecialization;
+      });
+  };
+
+  const renderAdminCharacterSpellsWindow: TWindowDescriptorRenderer = (descriptor, props) => {
+    const uid = descriptor.params?.uid || "";
+    const entry = characters.find((candidate) => candidate.id === uid);
+    const character = entry?.full || null;
+    const levelCap = computeSpellVisibilityCap(character?.level?.current || 1);
+    return (
+      <RndContainer
+        id={`admin-character-spells-${advId}-${uid}`}
+        close={props.close}
+        minimize={props.minimize}
+        selectWindow={props.selectWindow}
+        zIndex={props.zIndex}
+        label={descriptor.title}
+        aditionalIcons={null}
+        className={props.classes}
+      >
+        <CharacterSpellsPanel
+          spells={getVisibleSpellsForCharacter(character)}
+          levelCap={levelCap}
+          selectedSpecialization={character?.rp?.specialization || undefined}
+        />
+      </RndContainer>
+    );
+  };
+
+  const renderAdminCharacterSecondaryWindow: TWindowDescriptorRenderer = (descriptor, props) => {
+    const uid = descriptor.params?.uid || "";
+    const entry = characters.find((candidate) => candidate.id === uid);
+    const character = entry?.full || null;
+    return (
+      <RndContainer
+        id={`admin-character-secondary-${advId}-${uid}`}
+        close={props.close}
+        minimize={props.minimize}
+        selectWindow={props.selectWindow}
+        zIndex={props.zIndex}
+        label={descriptor.title}
+        aditionalIcons={null}
+        className={props.classes}
+      >
+        <CharacterSecondarySkillsPanel
+          secondaryStats={character?.secondaryStats || []}
+          currentLevel={character?.level?.current || 1}
+          spend={
+            entry && character
+              ? {
+                  advId,
+                  uid,
+                  expectedHash: entry.hash || "",
+                  availablePoints: Number(character.secondarySkillPoints || 0),
+                  onUpdated: (payload) => {
+                    const parsed = parseCharacterPayload(payload);
+                    if (!parsed.json) return;
+                    const row = payload as { hash?: string };
+                    commitUpdatedCharacter(entry, parsed.json, parsed.computed, row.hash);
+                  },
+                }
+              : undefined
+          }
+        />
+      </RndContainer>
+    );
+  };
+
   const buildCharacterDataWindow = (
     entry: CharacterIdentity,
     close: () => void,
@@ -730,35 +942,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
     const c = overrideCharacter ?? entry.full;
     const characterClassName = c?.class || entry.className;
     const classDef = classes.find((x) => x.name === characterClassName);
-    const spells = classDef?.spells || [];
     const secondarySkills = c?.secondaryStats || [];
-    const updateSecondarySkill = (
-      idx: number,
-      patch: Partial<Character.TSecondaryStat>,
-      label: string
-    ) => {
-      if (!c) return;
-      const current = c.secondaryStats?.[idx];
-      if (!current) return;
-      const next = JSON.parse(JSON.stringify(c)) as Character.TCharacter;
-      next.secondaryStats = [...(next.secondaryStats || [])];
-      next.secondaryStats[idx] = {
-        ...next.secondaryStats[idx],
-        ...patch,
-      };
-      void persistCharacterUpdate({
-        uid: entry.id,
-        advId,
-        json: next,
-        entry,
-        errorPrefix: `Failed to update ${label}`,
-      });
-    };
-    const secondaryLevelOptions = [
-      { label: "", value: Character.SECONDARY_STAT_LEVEL.NONE },
-      { label: Character.SECONDARY_STAT_LEVEL.BASIC, value: Character.SECONDARY_STAT_LEVEL.BASIC },
-      { label: Character.SECONDARY_STAT_LEVEL.MASTER, value: Character.SECONDARY_STAT_LEVEL.MASTER },
-    ];
     const inventoryItems = (c?.inventory?.backpacks || []).flatMap((bp, bpIndex) => {
       const width = Math.max(1, Number(bp.size?.sizeX || 1));
       return (bp.items || []).map((wrapped, itemIndex) => ({
@@ -975,31 +1159,50 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
         </div>
       );
     };
-    const descentOptions = descents.map((descent) => ({
-      label: descent.name,
-      value: descent.name,
-    }));
-    const classOptions = classes.map((classEntry) => ({
-      label: classEntry.name,
-      value: classEntry.name,
-    }));
     const specializationOptions = (classDef?.specs || []).map((spec) => ({
       label: spec.name,
       value: spec.name,
     }));
-    const levelOptions = Array.from({ length: 20 }, (_, idx) => {
-      const level = idx + 1;
-      return { label: String(level), value: level };
-    });
     const religionOptions = religions.map((religion) => ({
       label: religion.name,
       value: religion.name,
     }));
-    const personalityOptions = personalities.map((personality) => ({
-      label: personality.name,
-      value: personality.name,
-    }));
     const languageOptions = descents.map((descent) => descent.name);
+    const visibleSpells = getVisibleSpellsForCharacter(c);
+    const openAdminSpellsWindow = () => {
+      openCharacterSpellsWindow(entry);
+    };
+    const openAdminSecondaryStatsWindow = () => {
+      openCharacterSecondaryWindow(entry);
+    };
+    const adjustOrbs = async (key: keyof Character.TOrbs, delta: number) => {
+      if (!c) return;
+      const nextOrbs: Character.TOrbs = {
+        black: Math.max(0, Number(c.orbs?.black || 0)),
+        white: Math.max(0, Number(c.orbs?.white || 0)),
+        voidorb: Math.max(0, Number(c.orbs?.voidorb || 0)),
+      };
+      nextOrbs[key] = Math.max(0, nextOrbs[key] + delta);
+      await persistCharacterUpdate({
+        uid: entry.id,
+        advId,
+        json: {
+          ...c,
+          orbs: nextOrbs,
+        },
+        entry,
+        errorPrefix: "Failed to update orbs",
+      });
+    };
+    const saveAdminDamagePanel = async (nextCharacter: Character.TCharacter) => {
+      await persistCharacterUpdate({
+        uid: entry.id,
+        advId,
+        json: nextCharacter,
+        entry,
+        errorPrefix: "Failed to update damage/heal",
+      });
+    };
     return (
       <RndContainer
         id={`adv_char_data_${advId}_${entry.id}`}
@@ -1010,119 +1213,136 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
       >
           <div className="w-full h-full min-h-0 p-2 text-sm grid grid-cols-1 lg:grid-cols-3 gap-2 auto-rows-fr overflow-auto">
             <div className="min-h-0 overflow-auto p-1 border border-slate-500 rounded">
-              <p className="font-semibold mb-1">Basic Data</p>
-              <table className="w-full border-collapse text-xs">
-                <tbody>
-                  <tr>
-                    <td className="pr-2 font-semibold">Player UID</td><td className="pr-4">{entry.id}</td>
-                    <td className="pr-2 font-semibold">Name</td><td><EditableStat label="Name" path="rp.name" value={entry.name} /></td>
-                  </tr>
-                  <tr>
-                    <td className="pr-2 font-semibold">Race</td>
-                    <td className="pr-4">
-                      <EditableSelect
-                        label="Race"
-                        path="descent"
-                        value={c?.descent || ""}
-                        options={descentOptions}
-                      />
-                    </td>
-                    <td className="pr-2 font-semibold">Class</td>
-                    <td>
-                      <EditableSelect
-                        label="Class"
-                        path="class"
-                        value={c?.class || ""}
-                        options={classOptions}
-                      />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="pr-2 font-semibold">Level</td>
-                    <td className="pr-4">
-                      <EditableSelect
-                        label="Level"
-                        path="level.current"
-                        value={c?.level?.current || 1}
-                        options={levelOptions}
-                      />
-                    </td>
-                    <td className="pr-2 font-semibold">Religion</td>
-                    <td>
-                      <EditableSelect
-                        label="Religion"
-                        path="rp.religion"
-                        value={c?.rp?.religion || ""}
-                        options={religionOptions}
-                      />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="pr-2 font-semibold">Personality</td>
-                    <td className="pr-4">
-                      <EditableSelect
-                        label="Personality"
-                        path="rp.personality"
-                        value={c?.rp?.personality || ""}
-                        options={personalityOptions}
-                      />
-                    </td>
-                    <td className="pr-2 font-semibold">Specialization</td>
-                    <td>
-                      <EditableSelect
-                        label="Specialization"
-                        path="rp.specialization"
-                        value={c?.rp?.specialization || ""}
-                        options={specializationOptions}
-                        placeholder={
-                          Number(c?.level?.current || 1) >= 10
-                            ? "Select specialization"
-                            : "Level 10 required"
-                        }
-                        disabled={Number(c?.level?.current || 1) < 10}
-                      />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="pr-2 font-semibold">Languages</td>
-                    <td className="pr-4">
-                      <EditableList
-                        label="Languages"
-                        path="rp.knownLanguages"
-                        values={c?.rp?.knownLanguages || []}
-                        options={languageOptions}
-                      />
-                    </td>
-                    <td className="pr-2 font-semibold">HP</td><td>
-                      <EditableStat label="Current HP" path="resource.health.currentHp" value={c?.resource?.health?.currentHp ?? 0} /> /{" "}
-                      <EditableStat label="Max HP" path="resource.health.maxHp" value={c?.resource?.health?.maxHp ?? 0} />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="pr-2 font-semibold">Professions</td><td colSpan={3}><EditableStat label="Professions" path="rp.professions" value={c?.rp?.professions || []} /></td>
-                  </tr>
-                  <tr>
-                    <td className="pr-2 font-semibold">EP</td><td className="pr-4">
-                      <EditableStat label="Current EP" path="resource.health.currentEp" value={c?.resource?.health?.currentEp ?? 0} /> /{" "}
-                      <EditableStat label="Max EP" path="resource.health.maxEp" value={c?.resource?.health?.maxEp ?? 0} />
-                    </td>
-                    <td className="pr-2 font-semibold">ATK/DEF</td><td>
-                      <EditableStat label="ATK" path="hm.ATK" value={entry.hm.ATK} /> /{" "}
-                      <EditableStat label="DEF" path="hm.DEF" value={entry.hm.DEF} />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="pr-2 font-semibold">INI/AIM</td><td className="pr-4">
-                      <EditableStat label="INI" path="hm.INI" value={entry.hm.INI} /> /{" "}
-                      <EditableStat label="AIM" path="hm.AIM" value={entry.hm.AIM} />
-                    </td>
-                    <td></td>
-                    <td></td>
-                  </tr>
-                </tbody>
-              </table>
+              <p className="font-semibold mb-1">Alapadatok</p>
+              <div className="flex flex-col gap-1 text-xs">
+                <p><span className="font-semibold">Játékos UID:</span> {entry.id}</p>
+                <p><span className="font-semibold">Név:</span> {entry.name || "-"}</p>
+                <p><span className="font-semibold">Faj:</span> {c?.descent || "-"}</p>
+                <p><span className="font-semibold">Kaszt:</span> {c?.class || "-"}</p>
+                <p><span className="font-semibold">Szint:</span> {c?.level?.current || 1}</p>
+                <p><span className="font-semibold">XP:</span> {c?.level?.currentXp ?? 0}</p>
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="font-semibold">XP hozzáadása:</span>
+                  <input
+                    type="number"
+                    className="w-24 px-1 py-0.5 rounded text-black"
+                    value={xpByUid[entry.id] ?? 0}
+                    disabled={xpBusy || !c}
+                    onInput={(e) => {
+                      const value = Number((e.currentTarget as HTMLInputElement).value || 0);
+                      setXpByUid((prev) => ({ ...prev, [entry.id]: value }));
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="fancy-container px-2 py-0.5"
+                    disabled={xpBusy || !c || Number(xpByUid[entry.id] || 0) === 0}
+                    onClick={() => void grantXpToCharacter(entry, Number(xpByUid[entry.id] || 0), c)}
+                  >
+                    Add XP
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="font-semibold">Orbok:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
+                    {([
+                      ["black", "Fekete"],
+                      ["white", "Fehér"],
+                      ["voidorb", "Pszi"],
+                    ] as Array<[keyof Character.TOrbs, string]>).map(([key, label]) => {
+                      const value = Math.max(0, Number(c?.orbs?.[key] || 0));
+                      return (
+                        <div
+                          key={`${entry.id}-orb-${key}`}
+                          className="flex items-center justify-between gap-1 border border-slate-500 rounded px-1 py-0.5"
+                        >
+                          <span>{label}: {value}</span>
+                          <span className="flex gap-0.5">
+                            <button
+                              type="button"
+                              className="fancy-container px-1 py-0.5"
+                              disabled={!c || value < 1}
+                              onClick={() => void adjustOrbs(key, -1)}
+                              title={`${label} orb kivétele`}
+                            >
+                              -
+                            </button>
+                            <button
+                              type="button"
+                              className="fancy-container px-1 py-0.5"
+                              disabled={!c}
+                              onClick={() => void adjustOrbs(key, 1)}
+                              title={`${label} orb hozzáadása`}
+                            >
+                              +
+                            </button>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <p><span className="font-semibold">Jellem:</span> {c?.rp?.personality || "-"}</p>
+                <div>
+                  <span className="font-semibold">Hit:</span>{" "}
+                  <EditableSelect
+                    label="Hit"
+                    path="rp.religion"
+                    value={c?.rp?.religion || ""}
+                    options={religionOptions}
+                  />
+                </div>
+                <div>
+                  <span className="font-semibold">Szakosodás:</span>{" "}
+                  <EditableSelect
+                    label="Szakosodás"
+                    path="rp.specialization"
+                    value={c?.rp?.specialization || ""}
+                    options={specializationOptions}
+                    placeholder={
+                      Number(c?.level?.current || 1) >= 10
+                        ? "Select specialization"
+                        : "Level 10 required"
+                    }
+                    disabled={Number(c?.level?.current || 1) < 10}
+                  />
+                </div>
+                <div>
+                  <span className="font-semibold">Nyelvek:</span>
+                  <EditableList
+                    label="Nyelvek"
+                    path="rp.knownLanguages"
+                    values={c?.rp?.knownLanguages || []}
+                    options={languageOptions}
+                  />
+                </div>
+                <p>
+                  <span className="font-semibold">HP:</span>{" "}
+                  <EditableStat label="Current HP" path="resource.health.currentHp" value={c?.resource?.health?.currentHp ?? 0} /> /{" "}
+                  <EditableStat label="Max HP" path="resource.health.maxHp" value={c?.resource?.health?.maxHp ?? 0} />
+                </p>
+                <div>
+                  <span className="font-semibold">Képzettségek:</span>{" "}
+                  <EditableStat label="Képzettségek" path="rp.professions" value={c?.rp?.professions || []} />
+                </div>
+                <p>
+                  <span className="font-semibold">EP:</span>{" "}
+                  <EditableStat label="Current EP" path="resource.health.currentEp" value={c?.resource?.health?.currentEp ?? 0} /> /{" "}
+                  <EditableStat label="Max EP" path="resource.health.maxEp" value={c?.resource?.health?.maxEp ?? 0} />
+                </p>
+                <p>
+                  <span className="font-semibold">TÉ/VÉ:</span>{" "}
+                  <EditableStat label="ATK" path="hm.ATK" value={entry.hm.ATK} /> /{" "}
+                  <EditableStat label="DEF" path="hm.DEF" value={entry.hm.DEF} />
+                </p>
+                <p>
+                  <span className="font-semibold">KÉ/CÉ:</span>{" "}
+                  <EditableStat label="INI" path="hm.INI" value={entry.hm.INI} /> /{" "}
+                  <EditableStat label="AIM" path="hm.AIM" value={entry.hm.AIM} />
+                </p>
+              </div>
               <div className="mt-2">
-                <p className="font-semibold mb-1">Primary Stats (Editable)</p>
+                <p className="font-semibold mb-1">Elsődleges tulajdonságok (szerkeszthető)</p>
                 <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
                   {(c?.primaryStats || []).map((stat, idx) => (
                     <div key={`${entry.id}-primary-edit-${stat.name}-${idx}`} className="flex gap-1">
@@ -1136,137 +1356,58 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
                   ))}
                 </div>
               </div>
+              <details className="mt-2 text-xs">
+                <summary className="cursor-pointer font-semibold">RP adatok</summary>
+                <div className="mt-1 grid grid-cols-1 gap-1">
+                  <p><span className="font-semibold">Kor:</span> {c?.rp?.age ?? "-"}</p>
+                  <p><span className="font-semibold">Nem:</span> {c?.rp?.bioType || "-"}</p>
+                  <p><span className="font-semibold">Magasság:</span> {c?.rp?.height ?? "-"}</p>
+                  <p><span className="font-semibold">Súly:</span> {c?.rp?.weight ?? "-"}</p>
+                  <p><span className="font-semibold">Bőrszín:</span> {c?.rp?.skinColor || "-"}</p>
+                  <p><span className="font-semibold">Haj:</span> {c?.rp?.hair || "-"}</p>
+                  <p><span className="font-semibold">Szem:</span> {c?.rp?.eyes || "-"}</p>
+                  <p><span className="font-semibold">Születési hely:</span> {c?.rp?.bornPlace || "-"}</p>
+                  <p><span className="font-semibold">Iskolák:</span> {c?.rp?.schools || "-"}</p>
+                  <p className="whitespace-pre-wrap break-words">
+                    <span className="font-semibold">Leírás:</span> {c?.rp?.description || "-"}
+                  </p>
+                </div>
+              </details>
             </div>
 
             <div className="min-h-0 overflow-hidden p-1 border border-slate-500 rounded flex flex-col">
-              <p className="font-semibold mb-1">Spells</p>
-              <div className="min-h-0 grow overflow-y-auto">
-                {spells.length === 0 ? (
-                  <p>-</p>
-                ) : (
-                  <table className="w-full border-collapse">
-                    <tbody>
-                      {spells.map((spell) => (
-                        <tr key={`${entry.id}-spell-${spell.id}`}>
-                          <td className="pr-2 font-semibold">{spell.name}</td>
-                          <td>lvl {spell.lvlReq}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+              <p className="font-semibold mb-1">Karakter ablakok</p>
+              <div className="flex flex-col gap-2 text-xs">
+                <button
+                  type="button"
+                  className="fancy-container px-2 py-1 text-left"
+                  onClick={openAdminSpellsWindow}
+                >
+                  Varázslatok ({visibleSpells.length})
+                </button>
+                <button
+                  type="button"
+                  className="fancy-container px-2 py-1 text-left"
+                  onClick={openAdminSecondaryStatsWindow}
+                >
+                  Képzettségek ({secondarySkills.length})
+                </button>
               </div>
             </div>
 
             <div className="min-h-0 overflow-hidden p-1 border border-slate-500 rounded flex flex-col">
-              <p className="font-semibold mb-1">Secondary Skills</p>
-              <div className="min-h-0 grow overflow-y-auto">
-                {secondarySkills.length === 0 ? (
-                  <p>-</p>
-                ) : (
-                  <SecondaryStatsTable
-                    stats={secondarySkills}
-                    currentLevel={c?.level?.current || 1}
-                    tableClassName="border-collapse"
-                    emptyText="-"
-                    renderLevelCell={(row) => (
-                      <select
-                        className="w-full min-w-[80px] px-1 py-0.5 rounded text-black"
-                        value={row.current.skillLevel || Character.SECONDARY_STAT_LEVEL.NONE}
-                        disabled={!c}
-                        onChange={(e) => {
-                          updateSecondarySkill(
-                            row.currentSourceIndex,
-                            {
-                              skillLevel: e.currentTarget.value as Character.SECONDARY_STAT_LEVEL,
-                            },
-                            "secondary skill level"
-                          );
-                        }}
-                      >
-                        {secondaryLevelOptions.map((option) => (
-                          <option
-                            key={`${entry.id}-secondary-level-${row.currentSourceIndex}-${option.value}`}
-                            value={option.value}
-                          >
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    renderSkillCell={(row) => (
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        className="w-[72px] px-1 py-0.5 rounded text-black"
-                        defaultValue={String(clampInt(Number(row.current.skill || 0), 0, 100))}
-                        disabled={!c}
-                        onBlur={(e) => {
-                          const nextValue = clampInt(Number(e.currentTarget.value || 0), 0, 100);
-                          e.currentTarget.value = String(nextValue);
-                          if (nextValue === clampInt(Number(row.current.skill || 0), 0, 100)) return;
-                          updateSecondarySkill(
-                            row.currentSourceIndex,
-                            { skill: nextValue },
-                            "secondary skill value"
-                          );
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            (e.currentTarget as HTMLInputElement).blur();
-                          }
-                        }}
-                      />
-                    )}
-                    renderActionCell={(row) => (
-                      <div className="fancy-container p-0.5 flex flex-wrap items-center gap-0.5 min-w-0">
-                        <input
-                          type="number"
-                          min={1}
-                          max={100}
-                          defaultValue="1"
-                          className="w-12 min-w-0 px-1 py-0.5 rounded text-black"
-                          disabled={!c}
-                          data-secondary-add={`${entry.id}-${row.currentSourceIndex}`}
-                        />
-                        <button
-                          type="button"
-                          className="px-1 py-0.5 min-w-0"
-                          disabled={!c}
-                          onClick={(e) => {
-                            const root = (e.currentTarget as HTMLButtonElement).parentElement;
-                            const input = root?.querySelector("input") as HTMLInputElement | null;
-                            const amount = clampInt(Number(input?.value || 1), 1, 100);
-                            if (input) input.value = String(amount);
-                            const nextSkill = applySecondaryStatPoints(row.current, amount);
-                            if (
-                              nextSkill.skill === row.current.skill &&
-                              nextSkill.skillLevel === row.current.skillLevel
-                            ) {
-                              return;
-                            }
-                            updateSecondarySkill(
-                              row.currentSourceIndex,
-                              {
-                                skill: nextSkill.skill,
-                                skillLevel: nextSkill.skillLevel,
-                              },
-                              "secondary skill value"
-                            );
-                          }}
-                        >
-                          Add
-                        </button>
-                      </div>
-                    )}
-                  />
-                )}
-              </div>
+              {c ? (
+                <AdminCharacterDamagePanel
+                  character={c}
+                  onSave={saveAdminDamagePanel}
+                />
+              ) : (
+                <p>-</p>
+              )}
             </div>
 
             <div className="min-h-0 overflow-hidden p-1 border border-slate-500 rounded flex flex-col md:col-span-1">
-              <p className="font-semibold mb-1">Equipped Items</p>
+              <p className="font-semibold mb-1">Felszerelt tárgyak</p>
               <div className="min-h-0 grow overflow-y-auto">
                 {equippedItems.length === 0 ? (
                   <p>-</p>
@@ -1320,7 +1461,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
 
             <div className="min-h-0 overflow-hidden p-1 border border-slate-500 rounded flex flex-col md:col-span-1">
               <div className="flex items-center justify-between mb-1">
-                <p className="font-semibold">Auras</p>
+                <p className="font-semibold">Aurák / hatások</p>
                 <button
                   type="button"
                   className="fancy-container px-2 py-0.5"
@@ -1401,7 +1542,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
 
             <div className="min-h-0 overflow-hidden p-1 border border-slate-500 rounded flex flex-col md:col-span-1">
               <div className="flex items-center justify-between mb-1">
-                <p className="font-semibold">Inventory</p>
+                <p className="font-semibold">Felszereléslista</p>
                 <div className="flex gap-1">
                   <button
                     type="button"
@@ -1602,21 +1743,190 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
     }
   };
 
+  const openCharacterSpellsWindow = (entry: CharacterIdentity) => {
+    addWindow(buildAdminCharacterSubWindow({
+      advId,
+      uid: entry.id,
+      kind: "admin-adventure-character-spells",
+      title: `Varázslatok - ${entry.name}`,
+      icon: "SP",
+    }));
+  };
+
+  const openCharacterSecondaryWindow = (entry: CharacterIdentity) => {
+    addWindow(buildAdminCharacterSubWindow({
+      advId,
+      uid: entry.id,
+      kind: "admin-adventure-character-secondary",
+      title: `Képzettségek - ${entry.name}`,
+      icon: "KS",
+    }));
+  };
+
   useEffect(() => {
+    registerWindowDescriptorRenderer(
+      "admin-adventure-character-spells",
+      renderAdminCharacterSpellsWindow
+    );
+    registerWindowDescriptorRenderer(
+      "admin-adventure-character-secondary",
+      renderAdminCharacterSecondaryWindow
+    );
     setCharacterDataRenderer(buildCharacterDataWindow);
-    return () => setCharacterDataRenderer(null);
+    return () => {
+      unregisterWindowDescriptorRenderer(
+        "admin-adventure-character-spells",
+        renderAdminCharacterSpellsWindow
+      );
+      unregisterWindowDescriptorRenderer(
+        "admin-adventure-character-secondary",
+        renderAdminCharacterSecondaryWindow
+      );
+      setCharacterDataRenderer(null);
+    };
   });
+
+  const combatBoardRows = useMemo(() => {
+    if (!combatMode || combatInitiatives.length < 1) {
+      return characters.slice(0, 7).map((entry) => ({
+        type: "character" as const,
+        key: `character:${entry.id}`,
+        entry,
+      }));
+    }
+    return combatInitiatives
+      .map((row) => {
+        if (row.kind === "npc") {
+          return {
+            type: "npc" as const,
+            key: row.uid,
+            row,
+          };
+        }
+        const entry = characters.find((candidate) => candidate.id === row.uid);
+        if (!entry) return null;
+        return {
+          type: "character" as const,
+          key: `character:${entry.id}`,
+          entry,
+          row,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => !!row)
+      .slice(0, 7);
+  }, [characters, combatInitiatives, combatMode]);
+
+  const renderCharacterCard = (entry: CharacterIdentity) => (
+    <div
+      key={`adv-char-cell-${entry.id}`}
+      className="min-h-[150px] border border-slate-400 rounded-md p-3 bg-white/60 select-none cursor-pointer"
+      onClick={() => openCharacterDataWindow(entry)}
+    >
+      <div className="flex flex-col gap-1">
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-semibold truncate">{entry.name}</p>
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              className="px-2 py-0.5 rounded border border-slate-400 bg-slate-100 text-slate-900 text-xs"
+              onClick={(event) => {
+                event.stopPropagation();
+                openCharacterSpellsWindow(entry);
+              }}
+            >
+              Spells
+            </button>
+            <button
+              type="button"
+              className="px-2 py-0.5 rounded border border-slate-400 bg-slate-100 text-slate-900 text-xs"
+              onClick={(event) => {
+                event.stopPropagation();
+                openCharacterSecondaryWindow(entry);
+              }}
+            >
+              Skills
+            </button>
+          </div>
+        </div>
+        <p className="text-xs opacity-70 truncate">{userNamesByUid[entry.id] || entry.id}</p>
+        <p>Race: {entry.race}</p>
+        <p>Class: {entry.className}</p>
+        <p>Level: {entry.level}</p>
+        <p className="mt-1 font-medium">HM</p>
+        <p>
+          ATK: {entry.hm.ATK} | DEF: {entry.hm.DEF} | INI: {entry.hm.INI} | AIM: {entry.hm.AIM}
+        </p>
+        <p className="mt-1 font-medium">Primary Stats</p>
+        <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-sm">
+          {entry.primaryStats.map((stat) => (
+            <p key={`${entry.id}-${stat.name}`}>
+              {stat.name}: {stat.val ?? 0}
+            </p>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderNpcCard = (row: Adventure.TCombatInitiative) => (
+    <div
+      key={`adv-npc-cell-${row.uid}`}
+      className={`min-h-[150px] border rounded-md p-3 select-none ${
+        row.side === "friendly"
+          ? "border-emerald-500 bg-emerald-50/70"
+          : "border-red-500 bg-red-50/70"
+      }`}
+    >
+      <div className="flex flex-col gap-1">
+        <p className="font-semibold truncate">{row.name}</p>
+        <div className="flex items-center justify-between gap-1">
+          <p className="text-xs opacity-70 truncate">
+            {row.side === "friendly" ? "Baráti NJK" : "Ellenséges NJK"}
+          </p>
+          <button
+            type="button"
+            className="px-2 py-0.5 rounded border border-slate-400 bg-slate-100 text-slate-900 text-xs"
+            onClick={() => openNpcManageModal(row)}
+          >
+            Kezelés
+          </button>
+        </div>
+        <p>Initiative: {row.total}</p>
+        <p>
+          FP: {row.resource?.health?.currentHp ?? 0}/{row.resource?.health?.maxHp ?? 0} | EP:{" "}
+          {row.resource?.health?.currentEp ?? 0}/{row.resource?.health?.maxEp ?? 0}
+        </p>
+        <p>
+          {row.resource?.abilities?.name || Character.RESOURCE_TYPE.MANA}:{" "}
+          {row.resource?.abilities?.current ?? 0}/{row.resource?.abilities?.max ?? 0}
+        </p>
+        <p className="mt-1 font-medium">HM</p>
+        <p>
+          ATK: {row.hm?.ATK ?? 0} | DEF: {row.hm?.DEF ?? 0} | INI: {row.hm?.INI ?? row.baseInitiative} | AIM: {row.hm?.AIM ?? 0}
+        </p>
+        <p className="mt-1 font-medium">Primary Stats</p>
+        <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-sm">
+          {(row.primaryStats || []).map((stat) => (
+            <p key={`${row.uid}-${stat.name}`}>
+              {stat.name}: {stat.val ?? 0}
+            </p>
+          ))}
+        </div>
+        {row.notes ? <p className="text-xs mt-1">{row.notes}</p> : null}
+      </div>
+    </div>
+  );
 
   return (
     <div className="admin-adventures-page w-full h-full fancy-container p-2 sm:p-4 relative overflow-auto">
       <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
-        <h2 className="text-lg font-semibold">Adventure Characters</h2>
+        <h2 className="text-lg font-semibold">Kaland szereplői</h2>
         {isLoading ? <span>Loading...</span> : <span>{characters.length} total</span>}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="min-h-[150px] border border-slate-400 rounded-md p-3 bg-white/60 flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <p className="font-semibold">Commands</p>
+            <p className="font-semibold">Parancsok</p>
             <span className="text-sm">Turn: {turn}</span>
           </div>
           <div className="flex flex-col gap-1 text-sm">
@@ -1625,7 +1935,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
           </div>
           {combatMode ? (
             <div className="rounded border border-red-300 bg-red-50/70 p-2 text-xs">
-              <p className="font-semibold mb-1">Initiative</p>
+              <p className="font-semibold mb-1">Kezdeményezés</p>
               {combatInitiatives.length < 1 ? (
                 <p>-</p>
               ) : (
@@ -1717,14 +2027,35 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
               Next Turn
             </button>
             <div className="grid grid-cols-1 gap-1 rounded border border-slate-400 bg-white/50 p-1">
-              <p className="text-xs font-semibold">Vendor Mode</p>
+              <p className="text-xs font-semibold">Harc</p>
+              <select
+                className="px-2 py-1 rounded border border-slate-400 bg-slate-100 text-slate-900"
+                value={selectedCombatId}
+                disabled={combatMode}
+                onChange={(e) => setSelectedCombatId(e.currentTarget.value)}
+              >
+                <option value="">Harc kiválasztása</option>
+                {combats.map((combat) => (
+                  <option key={combat.id} value={combat.id}>{combat.name}</option>
+                ))}
+              </select>
+              <p className="text-xs opacity-80">
+                {combatMode
+                  ? `Active combat: ${combats.find((combat) => combat.id === selectedCombatId)?.name || "selected"}`
+                  : selectedCombatId
+                  ? "Ready to start combat mode."
+                  : "Select a combat first."}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-1 rounded border border-slate-400 bg-white/50 p-1">
+              <p className="text-xs font-semibold">Kereskedő mód</p>
               <select
                 className="px-2 py-1 rounded border border-slate-400 bg-slate-100 text-slate-900"
                 value={selectedVendorId}
                 disabled={Boolean(vendorState?.enabled)}
                 onChange={(e) => setSelectedVendorId(e.currentTarget.value)}
               >
-                <option value="">Select vendor</option>
+                <option value="">Kereskedő kiválasztása</option>
                 {vendors.map((vendor) => (
                   <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
                 ))}
@@ -1741,39 +2072,15 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
             </div>
           </div>
         </div>
-        {characters.slice(0, 7).map((entry) => (
-          <div
-            key={`adv-char-cell-${entry.id}`}
-            className="min-h-[150px] border border-slate-400 rounded-md p-3 bg-white/60 select-none cursor-pointer"
-            onClick={() => openCharacterDataWindow(entry)}
-          >
-            <div className="flex flex-col gap-1">
-              <p className="font-semibold truncate">{entry.name}</p>
-              <p className="text-xs opacity-70 truncate">{userNamesByUid[entry.id] || entry.id}</p>
-              <p>Race: {entry.race}</p>
-              <p>Class: {entry.className}</p>
-              <p>Level: {entry.level}</p>
-              <p className="mt-1 font-medium">HM</p>
-              <p>
-                ATK: {entry.hm.ATK} | DEF: {entry.hm.DEF} | INI: {entry.hm.INI} | AIM: {entry.hm.AIM}
-              </p>
-              <p className="mt-1 font-medium">Primary Stats</p>
-              <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-sm">
-                {entry.primaryStats.map((stat) => (
-                  <p key={`${entry.id}-${stat.name}`}>
-                    {stat.name}: {stat.val ?? 0}
-                  </p>
-                ))}
-              </div>
-            </div>
-          </div>
-        ))}
+        {combatBoardRows.map((row) =>
+          row.type === "npc" ? renderNpcCard(row.row) : renderCharacterCard(row.entry)
+        )}
       </div>
       {vendorState?.pendingTrades?.some((trade) => trade.status === "pending") && canUseDom
         ? createPortal(
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100010] p-2">
           <div className="fancy-container p-2 w-[min(620px,95vw)] max-h-[90vh] overflow-auto flex flex-col gap-2">
-            <p className="font-semibold">Vendor Trades</p>
+            <p className="font-semibold">Kereskedői cserék</p>
             <div className="flex flex-col gap-2">
               {vendorState.pendingTrades.filter((trade) => trade.status === "pending").map((trade) => (
                 <div className="fancy-container p-2 flex flex-col gap-1" key={trade.id}>
@@ -1781,12 +2088,12 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
                   <p className="text-xs">Character: {characters.find((entry) => entry.id === trade.uid)?.name || trade.uid}</p>
                   <div className="text-xs flex flex-col gap-1">
                     <FlexRow className="items-center gap-1 flex-wrap">
-                      <span>Suggested:</span>
+                      <span>Felajánlott:</span>
                       <MoneyDisplay copper={trade.suggestedPriceCopper} />
                     </FlexRow>
                     {typeof trade.requestedPriceCopper === "number" ? (
                       <FlexRow className="items-center gap-1 flex-wrap">
-                        <span>Requested:</span>
+                        <span>Kért:</span>
                         <MoneyDisplay copper={trade.requestedPriceCopper} />
                       </FlexRow>
                     ) : null}
@@ -1803,11 +2110,153 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
                     }
                   />
                   <div className="flex justify-end gap-1 flex-wrap">
-                    <button className="fancy-container px-2 py-1" type="button" onClick={() => resolveTrade(trade, false)}>Reject</button>
-                    <button className="fancy-container px-2 py-1" type="button" onClick={() => resolveTrade(trade, true)}>Accept</button>
+                    <button className="fancy-container px-2 py-1" type="button" onClick={() => resolveTrade(trade, false)}>Elutasítás</button>
+                    <button className="fancy-container px-2 py-1" type="button" onClick={() => resolveTrade(trade, true)}>Elfogadás</button>
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )
+        : <></>}
+      {npcManageTarget && canUseDom
+        ? createPortal(
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100011] p-2">
+          <div className="fancy-container p-2 w-[min(560px,95vw)] max-h-[90vh] overflow-auto flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-semibold">NJK kezelése: {npcManageTarget.name}</p>
+              <button
+                type="button"
+                className="fancy-container px-2 py-1"
+                onClick={() => setNpcManageTargetUid("")}
+                disabled={npcManageBusy}
+              >
+                Close
+              </button>
+            </div>
+            <div className="text-sm flex flex-col gap-1">
+              <p>
+                FP: {npcManageTarget.resource?.health?.currentHp ?? 0}/{npcManageTarget.resource?.health?.maxHp ?? 0} | EP:{" "}
+                {npcManageTarget.resource?.health?.currentEp ?? 0}/{npcManageTarget.resource?.health?.maxEp ?? 0}
+              </p>
+              <p>
+                {npcManageTarget.resource?.abilities?.name || Character.RESOURCE_TYPE.MANA}:{" "}
+                {npcManageTarget.resource?.abilities?.current ?? 0}/{npcManageTarget.resource?.abilities?.max ?? 0}
+              </p>
+            </div>
+            <table className="w-full table-fixed border-separate border-spacing-y-1 text-sm">
+              <tbody>
+                <tr>
+                  <td className="w-[34%] pr-1 whitespace-nowrap"><label htmlFor="npc-damage-value">Sebzés</label></td>
+                  <td className="pr-1">
+                    <input
+                      id="npc-damage-value"
+                      type="number"
+                      min={0}
+                      className="w-full px-1 rounded text-black"
+                      value={npcDamageValue}
+                      onInput={(e) => setNpcDamageValue(Number(e.currentTarget.value) || 0)}
+                      disabled={npcManageBusy}
+                    />
+                  </td>
+                  <td className="w-[112px]">
+                    <button
+                      type="button"
+                      className="fancy-container px-2 py-1 w-full"
+                      onClick={() => void applyNpcResourceAction("damage", npcDamageValue)}
+                      disabled={npcManageBusy}
+                    >
+                      Alkalmaz
+                    </button>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="pr-1 whitespace-nowrap"><label htmlFor="npc-heal-hp-value">FP gyógyítás</label></td>
+                  <td className="pr-1">
+                    <input
+                      id="npc-heal-hp-value"
+                      type="number"
+                      min={0}
+                      className="w-full px-1 rounded text-black"
+                      value={npcHealHpValue}
+                      onInput={(e) => setNpcHealHpValue(Number(e.currentTarget.value) || 0)}
+                      disabled={npcManageBusy}
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="fancy-container px-2 py-1 w-full"
+                      onClick={() => void applyNpcResourceAction("healHp", npcHealHpValue)}
+                      disabled={npcManageBusy}
+                    >
+                      FP
+                    </button>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="pr-1 whitespace-nowrap"><label htmlFor="npc-heal-ep-value">EP gyógyítás</label></td>
+                  <td className="pr-1">
+                    <input
+                      id="npc-heal-ep-value"
+                      type="number"
+                      min={0}
+                      className="w-full px-1 rounded text-black"
+                      value={npcHealEpValue}
+                      onInput={(e) => setNpcHealEpValue(Number(e.currentTarget.value) || 0)}
+                      disabled={npcManageBusy}
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="fancy-container px-2 py-1 w-full"
+                      onClick={() => void applyNpcResourceAction("healEp", npcHealEpValue)}
+                      disabled={npcManageBusy}
+                    >
+                      EP
+                    </button>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="pr-1 whitespace-nowrap"><label htmlFor="npc-resource-delta-value">Erőforrás +/-</label></td>
+                  <td className="pr-1">
+                    <input
+                      id="npc-resource-delta-value"
+                      type="number"
+                      className="w-full px-1 rounded text-black"
+                      value={npcResourceDeltaValue}
+                      onInput={(e) => setNpcResourceDeltaValue(Number(e.currentTarget.value) || 0)}
+                      disabled={npcManageBusy}
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="fancy-container px-2 py-1 w-full"
+                      onClick={() => void applyNpcResourceAction("resourceDelta", npcResourceDeltaValue)}
+                      disabled={npcManageBusy}
+                    >
+                      Mentés
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div className="flex flex-col gap-0.5 max-h-[220px] overflow-auto text-xs">
+              {(npcManageTarget.damageLog || []).length === 0 ? (
+                <p>Nincs sebzésesemény.</p>
+              ) : (
+                [...(npcManageTarget.damageLog || [])]
+                  .reverse()
+                  .map((entry) => (
+                    <p key={entry.id}>
+                      {formatClientDateTime(entry.time)} | FP {entry.hpChange} | EP {entry.epChange} [{entry.hpCurrent}/{entry.hpMax} FP, {entry.epCurrent}/{entry.epMax} EP]
+                    </p>
+                  ))
+              )}
             </div>
           </div>
         </div>,
@@ -1818,7 +2267,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
         ? createPortal(
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000] p-2">
           <div className="fancy-container p-2 w-[min(540px,95vw)] max-w-[95vw] max-h-[90vh] h-[min(82vh,720px)] flex flex-col gap-2">
-            <p className="font-semibold">Add Item To Inventory</p>
+            <p className="font-semibold">Tárgy hozzáadása a felszereléslistához</p>
             <div className="flex gap-2 items-center flex-wrap">
               <input
                 className="grow min-w-0 px-2 py-1 rounded"
@@ -1841,7 +2290,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
               {addBusy ? (
                 <p>Loading...</p>
               ) : itemResults.length === 0 ? (
-                <p>No matching items.</p>
+                <p>Nincs egyező tárgy.</p>
               ) : (
                 <table className="w-full border-collapse text-xs">
                   <tbody>
@@ -1923,9 +2372,9 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
         ? createPortal(
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100004] p-2">
           <div className="fancy-container p-2 w-[min(560px,95vw)] max-w-[95vw] max-h-[90vh] overflow-auto flex flex-col gap-2">
-            <p className="font-semibold">Give XP</p>
+            <p className="font-semibold">TP adása</p>
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm whitespace-nowrap">All players:</p>
+              <p className="text-sm whitespace-nowrap">Minden játékos:</p>
               <input
                 type="number"
                 className="px-2 py-1 rounded w-[140px]"
@@ -1984,7 +2433,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
         ? createPortal(
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100001] p-2">
           <div className="fancy-container p-2 w-[min(520px,95vw)] max-w-[95vw] max-h-[90vh] overflow-auto flex flex-col gap-2">
-            <p className="font-semibold">{auraTarget?.auraId ? "Edit Aura" : "Add Aura"}</p>
+            <p className="font-semibold">{auraTarget?.auraId ? "Edit Aura" : "Aura hozzáadása"}</p>
             <AuraEditor draft={auraDraft} onChange={setAuraDraft} />
             <div className="flex justify-end gap-2 flex-wrap">
               <button
@@ -2114,7 +2563,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
         ? createPortal(
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100002] p-2">
           <div className="fancy-container p-2 w-[min(420px,95vw)] max-w-[95vw] max-h-[90vh] overflow-auto flex flex-col gap-2">
-            <p className="font-semibold">Edit Money</p>
+            <p className="font-semibold">Pénz szerkesztése</p>
             <MoneyAddInput
               id="admin-character-money"
               valueCopper={moneyBreakdownToCopper(moneyDraft)}
@@ -2222,11 +2671,11 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
         ? createPortal(
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100006] p-2">
           <div className="fancy-container p-2 w-[min(620px,95vw)] max-w-[95vw] max-h-[90vh] overflow-auto flex flex-col gap-2">
-            <p className="font-semibold">Edit Character Stat</p>
+            <p className="font-semibold">Karakterérték szerkesztése</p>
             <p className="text-xs">
               Clicked: <span className="font-semibold">{statEditTarget?.label || "-"}</span>
             </p>
-            <label className="text-xs font-semibold">Path</label>
+            <label className="text-xs font-semibold">Útvonal</label>
             <input
               className="px-2 py-1 rounded text-black"
               value={statEditPath}
@@ -2234,7 +2683,7 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
               placeholder="Example: hm.ATK or primaryStats[0].val"
               disabled={statEditBusy}
             />
-            <label className="text-xs font-semibold">Value (JSON preferred)</label>
+            <label className="text-xs font-semibold">Érték (JSON ajánlott)</label>
             <textarea
               className="px-2 py-1 rounded text-black min-h-[140px]"
               value={statEditValueRaw}
@@ -2295,6 +2744,8 @@ export default function AdventureGridView({ advId = "" }: { advId?: string }) {
     </div>
   );
 }
+
+
 
 
 

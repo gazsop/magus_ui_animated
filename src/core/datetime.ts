@@ -12,3 +12,13 @@ export const formatClientDateTime = (value: number | Date | null | undefined): s
   const sec = String(date.getSeconds()).padStart(2, "0");
   return `${yyyy}.${mm}.${dd}. ${hh}:${min}:${sec}`;
 };
+
+export const formatClientTime = (value: number | Date | null | undefined): string => {
+  if (value === null || value === undefined) return "-";
+  const date = value instanceof Date ? value : new Date(Number(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  const sec = String(date.getSeconds()).padStart(2, "0");
+  return `${hh}:${min}:${sec}`;
+};

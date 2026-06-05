@@ -37,6 +37,7 @@ export function WindowRegistryProvider(props: {
   shortcuts?: IWindowsLayerShortcut[];
   onlineUsers?: IOnlineUserBadge[];
   currentPage: PageState;
+  blockedWindowNames?: string[];
 }) {
   return (
     <WindowsLayerProvider
@@ -44,6 +45,7 @@ export function WindowRegistryProvider(props: {
       shortcuts={props.shortcuts}
       onlineUsers={props.onlineUsers}
       currentPage={props.currentPage}
+      blockedWindowNames={props.blockedWindowNames}
     >
       <WindowRegistryBridge>{props.children}</WindowRegistryBridge>
     </WindowsLayerProvider>

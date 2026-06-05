@@ -1,9 +1,5 @@
-import { Adventure, Application, Character, ServerApi, Vendor } from "@shared/contracts";
-import {
-  buildSecondaryStatDisplayRows,
-  formatRoll as formatSharedRoll,
-  getRollRange,
-} from "@shared/game";
+﻿import { Adventure, Application, Character, ServerApi, Vendor } from "@shared/contracts";
+import { formatRoll as formatSharedRoll, getRollRange } from "@shared/game";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { FlexCol, FlexRow } from "@components/Flex";
 import { JSX } from "preact";
@@ -31,8 +27,8 @@ import {
   useWindowsLayer,
 } from "@pages/WindowsLayer";
 import RndContainer from "@components/RndContainer";
-import { useAdventureSseSubscription, useSyncStatusSubscription } from "@hooks/sse";
-import { useSseContext } from "@contexts/sseContext";
+import { useAdventureLiveEventSubscription, useSyncStatusSubscription } from "@hooks/liveEvents";
+import { useLiveEventsContext } from "@contexts/liveEventsContext";
 import { usePresenceUI } from "@contexts/presenceUIContext";
 import { createPortal } from "preact/compat";
 import { debugLog } from "@/core/logger";
@@ -127,19 +123,22 @@ const buildCharacterPatch = (
   return patch;
 };
 
+const isInventoryOnlyPatch = (patch: ServerApi.PatchOperation[]) =>
+  patch.length === 1 && patch[0].op === "replace" && patch[0].path === "/inventory";
+
 const DEFAULT_LAYOUT: TLayoutState = {
-  header_xp: { x: 1, y: 1, w: 4, h: 1 },
-  header_identity: { x: 1, y: 2, w: 2, h: 1 },
-  header_orbs: { x: 3, y: 2, w: 1, h: 1 },
-  header_resourcebars: { x: 4, y: 2, w: 1, h: 1 },
-  header_stats: { x: 1, y: 3, w: 2, h: 2 },
-  header_hm: { x: 3, y: 3, w: 2, h: 2 },
-  rp: { x: 1, y: 5, w: 2, h: 4 },
+  header_xp: { x: 1, y: 1, w: 33, h: 2 },
+  header_identity: { x: 1, y: 3, w: 11, h: 7 },
+  header_orbs: { x: 25, y: 3, w: 3, h: 7 },
+  header_resourcebars: { x: 28, y: 3, w: 6, h: 7 },
+  header_stats: { x: 1, y: 10, w: 33, h: 7 },
+  header_hm: { x: 12, y: 3, w: 13, h: 7 },
+  rp: { x: 27, y: 17, w: 14, h: 14 },
   inventory: { x: 3, y: 5, w: 2, h: 3 },
-  default_storage: { x: 1, y: 8, w: 2, h: 1 },
-  equipment: { x: 1, y: 9, w: 2, h: 3 },
-  auras: { x: 3, y: 8, w: 2, h: 2 },
-  damages: { x: 3, y: 10, w: 2, h: 2 },
+  default_storage: { x: 1, y: 30, w: 12, h: 11 },
+  equipment: { x: 13, y: 17, w: 14, h: 25 },
+  auras: { x: 21, y: 41, w: 19, h: 24 },
+  damages: { x: 1, y: 41, w: 20, h: 24 },
 };
 
 const sanitizeLayoutItem = (
@@ -253,7 +252,7 @@ export default function CharacterPage({
   const [adventureRequest] = useRequest(Application.REQUEST_CONTROLLER.ADVENTURES);
   const [restRequest] = useRequest(Application.REQUEST_CONTROLLER.REST);
   const { user, descents, classes } = useDataContext();
-  const { setSyncSnapshot } = useSseContext();
+  const { setSyncSnapshot } = useLiveEventsContext();
   const { setCombatBadge } = usePresenceUI();
   const { addWindow, toggleWindow } = useWindowsLayer();
   const [religions, setReligions] = useState<Array<{ name: string; value: string }>>([]);
@@ -272,7 +271,6 @@ export default function CharacterPage({
     INI: 0,
     AIM: 0,
   });
-  const [secondaryAlloc, setSecondaryAlloc] = useState<Record<string, number>>({});
   const [specializationChoice, setSpecializationChoice] = useState<string>("");
   const [levelUpError, setLevelUpError] = useState("");
   const characterHashRef = useRef<string>("");
@@ -294,13 +292,28 @@ export default function CharacterPage({
     []
   );
 
+  const applyInventoryResponse = useCallback((payload: unknown): boolean => {
+    const parsed = parseCharacterPayload(payload);
+    const nextInventory = parsed.json?.inventory;
+    if (!nextInventory) return false;
+    setSelectedCharacter((prev) => ({
+      ...prev,
+      inventory: nextInventory,
+    }));
+    if (parsed.computed) setComputedCharacter(parsed.computed);
+    const nextHash = parsed.hash || "";
+    characterHashRef.current = nextHash;
+    setCharacterHash(nextHash);
+    return true;
+  }, []);
+
   const { setDisableNavArrows } = useUtilContext();
   const [isLoadingCharacter, setIsLoadingCharacter] = useState<boolean>(true);
   const gridHostRef = useRef<HTMLDivElement>(null);
   const [gridSpec, setGridSpec] = useState({
     cols: 4,
-    cellW: 180,
-    rowH: 120,
+    cellW: 36,
+    rowH: 24,
     gap: 8,
     pad: 0,
   });
@@ -499,7 +512,7 @@ export default function CharacterPage({
         id="character-spells-window"
         aditionalIcons={null}
         close={close}
-        label="Spells"
+        label="Varázslatok"
         className={classes}
       >
         <CharacterSpellsPanel
@@ -514,12 +527,23 @@ export default function CharacterPage({
         id="character-secondary-skills-window"
         aditionalIcons={null}
         close={close}
-        label="Secondary Skills"
+        label="Képzettségek"
         className={classes}
       >
         <CharacterSecondarySkillsPanel
           secondaryStats={secondarySkillsForWindow}
           currentLevel={selectedCharacter.level?.current || 1}
+          spend={
+            advId && user?.uid
+              ? {
+                  advId,
+                  uid: user.uid,
+                  expectedHash: characterHash,
+                  availablePoints: Number(selectedCharacter.secondarySkillPoints || 0),
+                  onUpdated: applyCharacterResponse,
+                }
+              : undefined
+          }
         />
       </RndContainer>
     );
@@ -574,7 +598,7 @@ export default function CharacterPage({
         defineWindowRegistration({
           id: "CHAR_SPELLS",
           kind: "character-spells",
-          title: "Spells",
+          title: "Varázslatok",
           icon: "SP",
           defaultOpen: false,
           allowedPages: [PageState.CHAR_SHEET],
@@ -589,7 +613,7 @@ export default function CharacterPage({
         defineWindowRegistration({
           id: "CHAR_SECONDARY_SKILLS",
           kind: "character-secondary-skills",
-          title: "Secondary Skills",
+          title: "Képzettségek",
           icon: "SS",
           defaultOpen: false,
           allowedPages: [PageState.CHAR_SHEET],
@@ -643,6 +667,8 @@ export default function CharacterPage({
     user?.uid,
     advId,
     characterRequest,
+    characterHash,
+    applyCharacterResponse,
     toggleWindow,
   ]);
   useEffect(() => {
@@ -652,7 +678,7 @@ export default function CharacterPage({
 
     const GAP = 8;
     const PAD = 0;
-    const MIN_CELL_W = 180;
+    const MIN_CELL_W = 30;
     const DENSITY = 3;
     const EFFECTIVE_MIN_CELL_W = Math.max(1, Math.floor(MIN_CELL_W / DENSITY));
 
@@ -663,15 +689,12 @@ export default function CharacterPage({
       const cellW = Math.max(1, Math.floor((innerW - GAP * (cols - 1)) / cols));
       // Keep an integer row unit tied to width; matches previous 180x120 ratio.
       const rowH = Math.max(1, Math.floor((cellW * 2) / 3));
-      setGridSpec((prev) =>
-        prev.cols === cols &&
-        prev.cellW === cellW &&
-        prev.rowH === rowH &&
-        prev.gap === GAP &&
-        prev.pad === PAD
-          ? prev
-          : { cols, cellW, rowH, gap: GAP, pad: PAD }
-      );
+      if(gridSpec.cols === cols &&
+        gridSpec.cellW === cellW &&
+        gridSpec.rowH === rowH &&
+        gridSpec.gap === GAP &&
+        gridSpec.pad === PAD) return;
+      else setGridSpec({ cols, cellW, rowH, gap: GAP, pad: PAD });
     };
 
     recalc();
@@ -771,16 +794,19 @@ export default function CharacterPage({
       .catch(() => setVendorState(null));
   }, [advId]);
 
-  useAdventureSseSubscription(
+  useAdventureLiveEventSubscription(
     "character:updated",
     advId,
     (payload: {
       uid?: string;
       advId?: string;
+      patch?: ServerApi.PatchOperation[] | null;
       character?: unknown;
     }) => {
       const eventUid = String(payload.uid || "");
       if (!eventUid || eventUid !== user?.uid) return;
+
+      if (applyRemoteCharacterPatch(payload.patch || undefined, payload.character)) return;
 
       const parsedCharacter = parseCharacterPayload(payload.character).json;
       if (parsedCharacter) {
@@ -802,31 +828,48 @@ export default function CharacterPage({
     },
     []
   );
-  useAdventureSseSubscription("vendor:state", advId, (payload: Vendor.TVendorState) => {
+
+  const applyRemoteCharacterPatch = useCallback(
+    (patch: ServerApi.PatchOperation[] | undefined, payload: unknown): boolean => {
+      if (!Array.isArray(patch) || patch.length === 0) return false;
+      const supported = patch.every((op) => op.op === "replace" && op.path === "/inventory");
+      if (!supported) return false;
+      const inventoryPatch = patch.find((op) => op.path === "/inventory");
+      const nextInventory = inventoryPatch?.value as Character.Item.TInventory | undefined;
+      if (!nextInventory) return false;
+      const parsed = parseCharacterPayload(payload);
+      setSelectedCharacter((prev) => ({
+        ...prev,
+        inventory: nextInventory,
+      }));
+      if (parsed.computed) setComputedCharacter(parsed.computed);
+      const nextHash = parsed.hash || "";
+      characterHashRef.current = nextHash;
+      setCharacterHash(nextHash);
+      return true;
+    },
+    []
+  );
+  useAdventureLiveEventSubscription("vendor:state", advId, (payload: Vendor.TVendorState) => {
     setVendorState(payload);
   });
-  useAdventureSseSubscription(
+  useAdventureLiveEventSubscription(
     "vendor:tradeResolved",
     advId,
     (payload: { vendor?: Vendor.TVendorState }) => {
       if (payload.vendor) setVendorState(payload.vendor);
     }
   );
-  useAdventureSseSubscription("character:levelup", advId, (payload: TPendingLevelUp) => {
+  useAdventureLiveEventSubscription("character:levelup", advId, (payload: TPendingLevelUp) => {
     if (!payload || payload.uid !== user?.uid) return;
     const rows = Array.from({ length: Math.max(0, Number(payload.levelUps || 0)) }, () => ({
       hp: 0,
       resource: 0,
     }));
-    const secMap: Record<string, number> = {};
-    (selectedCharacter.secondaryStats || []).forEach((s) => {
-      secMap[s.id] = 0;
-    });
     setPendingLevelUp(payload);
     setLevelUpStep(0);
     setLevelHpRows(rows);
     setHmAlloc({ ATK: 0, DEF: 0, INI: 0, AIM: 0 });
-    setSecondaryAlloc(secMap);
     setSpecializationChoice(String(selectedCharacter.rp?.specialization || "").trim());
     setLevelUpError("");
   });
@@ -874,6 +917,9 @@ export default function CharacterPage({
             if (patch.length < 1) return;
             try {
               const response = await executeUpdate(patch);
+              if (isInventoryOnlyPatch(patch) && applyInventoryResponse(response.data)) {
+                return;
+              }
               applyCharacterResponse(response.data);
               return;
             } catch (err) {
@@ -887,7 +933,15 @@ export default function CharacterPage({
         });
       await saveQueueRef.current;
     },
-    [advId, user?.uid, fetchCharacter, selectedCharacter, hasCharacterRecord, applyCharacterResponse]
+    [
+      advId,
+      user?.uid,
+      fetchCharacter,
+      selectedCharacter,
+      hasCharacterRecord,
+      applyCharacterResponse,
+      applyInventoryResponse,
+    ]
   );
   useEffect(() => {
     characterHashRef.current = characterHash;
@@ -962,6 +1016,7 @@ export default function CharacterPage({
           source,
         },
       });
+      if (applyInventoryResponse(response.data)) return;
       applyCharacterResponse(response.data);
     },
     onSellItem: async (source, requestedPriceCopper) => {
@@ -986,6 +1041,7 @@ export default function CharacterPage({
           source,
         },
       });
+      if (applyInventoryResponse(response.data)) return;
       applyCharacterResponse(response.data);
     },
     onEquipItem: async (source, targetSlotId, target) => {
@@ -1000,6 +1056,7 @@ export default function CharacterPage({
           target,
         },
       });
+      if (applyInventoryResponse(response.data)) return;
       applyCharacterResponse(response.data);
     },
   });
@@ -1207,33 +1264,25 @@ export default function CharacterPage({
     !String(selectedCharacter.rp?.specialization || "").trim();
 
   const totalHmAllocated = hmAlloc.ATK + hmAlloc.DEF + hmAlloc.INI + hmAlloc.AIM;
-  const totalSecondaryAllocated = Object.values(secondaryAlloc).reduce(
-    (sum, n) => sum + Number(n || 0),
-    0
-  );
+  const hasResourceLevelUpRoll =
+    !!pendingLevelUp?.resourceRoll &&
+    (Number(pendingLevelUp.resourceRoll.nrOfDices || 0) > 0 ||
+      Number(pendingLevelUp.resourceRoll.constant || 0) !== 0);
   const canGoNextFromHp =
     levelHpRows.length === 0 ||
-    levelHpRows.every((r) => Number.isFinite(r.hp) && Number.isFinite(r.resource) && r.hp >= 0 && r.resource >= 0);
+    levelHpRows.every(
+      (r) =>
+        Number.isFinite(r.hp) &&
+        r.hp >= 0 &&
+        (!hasResourceLevelUpRoll ||
+          (Number.isFinite(r.resource) && r.resource >= 0))
+    );
   const canGoNextFromHm = !pendingLevelUp || totalHmAllocated === pendingLevelUp.hmPoints;
-  const canFinishSecondary =
-    !pendingLevelUp ||
-    (buildSecondaryStatDisplayRows(
-      selectedCharacter.secondaryStats || [],
-      selectedCharacter.level?.current || 1
-    ).length === 0
-      ? pendingLevelUp.secondarySkillPoints === 0
-      : totalSecondaryAllocated === pendingLevelUp.secondarySkillPoints);
 
   const applyLevelUpWizard = async () => {
     if (!pendingLevelUp) return;
-    if (!canFinishSecondary) {
-      setLevelUpError(
-        `Secondary points must be fully allocated (${totalSecondaryAllocated}/${pendingLevelUp.secondarySkillPoints}).`
-      );
-      return;
-    }
     if (needsSpecializationSelection && !specializationChoice.trim()) {
-      setLevelUpError("Select a specialization before saving level 10.");
+      setLevelUpError("Válassz specializációt a 10. szint mentése előtt.");
       return;
     }
     const response = await characterRequest<Character.TCharacterServer | Character.TCharacter>({
@@ -1242,9 +1291,10 @@ export default function CharacterPage({
         advId,
         uid: user?.uid,
         hpGains: levelHpRows.map((r) => Number(r.hp || 0)),
-        resourceGains: levelHpRows.map((r) => Number(r.resource || 0)),
+        resourceGains: levelHpRows.map((r) =>
+          hasResourceLevelUpRoll ? Number(r.resource || 0) : 0
+        ),
         hmAlloc,
-        secondaryAlloc,
         levelUps: pendingLevelUp.levelUps,
         specialization: specializationChoice.trim() || undefined,
       },
@@ -1254,8 +1304,12 @@ export default function CharacterPage({
     if (!parsedCharacter) throw new Error("Invalid apply level-up response");
     setSelectedCharacter(parsedCharacter);
     setComputedCharacter(parsed.computed);
+    const nextHash = parsed.hash || "";
+    characterHashRef.current = nextHash;
+    setCharacterHash(nextHash);
     setPendingLevelUp(null);
     setLevelUpError("");
+    window.dispatchEvent(new CustomEvent("character-toggle-secondary-skills"));
   };
 
   return (
@@ -1273,7 +1327,7 @@ export default function CharacterPage({
       ) : null}
       {isLoadingCharacter && isMobileLayout ? (
         <FlexRow className="w-full justify-center items-center p-2">
-          <p>Loading character...</p>
+          <p>Karakterlap idézése...</p>
         </FlexRow>
       ) : null}
       {!isLoadingCharacter && hasCharacterRecord && isMobileLayout ? (
@@ -1304,7 +1358,7 @@ export default function CharacterPage({
       {isLoadingCharacter ? (
         <GridItem x={1} y={1} colSpan={2} rowSpan={1}>
           <FlexRow className="w-full justify-center items-center p-2">
-          <p>Loading character...</p>
+          <p>Karakterlap idézése...</p>
         </FlexRow>
         </GridItem>
       ) : null}
@@ -1508,7 +1562,7 @@ export default function CharacterPage({
             <div className="fixed right-4 top-20 z-[100002] w-[min(420px,92vw)] max-h-[70vh] fancy-container p-2 overflow-auto flex flex-col gap-2">
               <p className="font-semibold">{vendorState.vendorName}</p>
               {(vendorState.items || []).length === 0 ? (
-                <p className="text-sm">No items.</p>
+                <p className="text-sm">Nincs tárgy.</p>
               ) : (
                 vendorState.items.map((entry) => (
                   <div key={entry.id} className="fancy-container p-2 flex flex-col gap-1 text-sm">
@@ -1560,17 +1614,27 @@ export default function CharacterPage({
                 {levelUpStep === 0 ? (
                   <div className="flex flex-col gap-2 min-h-0">
                     <p className="text-sm">
-                      Roll per level: HP `{formatRoll(pendingLevelUp.hpRoll)}` and Resource `{formatRoll(pendingLevelUp.resourceRoll)}`
+                      Dobás szintenként: ÉP `{formatRoll(pendingLevelUp.hpRoll)}`
+                      {hasResourceLevelUpRoll
+                        ? ` és erőforrás \`${formatRoll(pendingLevelUp.resourceRoll)}\``
+                        : ""}
                     </p>
                     <div className="max-h-[320px] overflow-auto border border-slate-500 rounded p-1">
                       {levelHpRows.map((row, idx) => (
-                        <div key={`lvlup-hp-${idx}`} className="grid grid-cols-1 sm:grid-cols-[80px_1fr_1fr] gap-2 items-center mb-1">
-                          <p>Level {pendingLevelUp.oldLevel + idx + 1}</p>
+                        <div
+                          key={`lvlup-hp-${idx}`}
+                          className={`grid grid-cols-1 ${
+                            hasResourceLevelUpRoll
+                              ? "sm:grid-cols-[80px_1fr_1fr]"
+                              : "sm:grid-cols-[80px_1fr]"
+                          } gap-2 items-center mb-1`}
+                        >
+                          <p>Szint {pendingLevelUp.oldLevel + idx + 1}</p>
                           <input
                             type="number"
                             min={0}
                             className="px-2 py-1 rounded"
-                            placeholder="HP gain"
+                            placeholder="ÉP gyógyulás"
                             value={row.hp}
                             onInput={(e) => {
                               const value = Math.max(0, Number((e.currentTarget as HTMLInputElement).value || 0));
@@ -1579,19 +1643,21 @@ export default function CharacterPage({
                               );
                             }}
                           />
-                          <input
-                            type="number"
-                            min={0}
-                            className="px-2 py-1 rounded"
-                            placeholder="Resource gain"
-                            value={row.resource}
-                            onInput={(e) => {
-                              const value = Math.max(0, Number((e.currentTarget as HTMLInputElement).value || 0));
-                              setLevelHpRows((prev) =>
-                                prev.map((r, i) => (i === idx ? { ...r, resource: value } : r))
-                              );
-                            }}
-                          />
+                          {hasResourceLevelUpRoll ? (
+                            <input
+                              type="number"
+                              min={0}
+                              className="px-2 py-1 rounded"
+                              placeholder="Erőforrás gyarapodás"
+                              value={row.resource}
+                              onInput={(e) => {
+                                const value = Math.max(0, Number((e.currentTarget as HTMLInputElement).value || 0));
+                                setLevelHpRows((prev) =>
+                                  prev.map((r, i) => (i === idx ? { ...r, resource: value } : r))
+                                );
+                              }}
+                            />
+                          ) : null}
                         </div>
                       ))}
                     </div>
@@ -1600,59 +1666,39 @@ export default function CharacterPage({
                 {levelUpStep === 1 ? (
                   <div className="flex flex-col gap-2">
                     <p className="text-sm">
-                      Allocate HM points: {totalHmAllocated}/{pendingLevelUp.hmPoints}
+                      HM pontok kiosztása: {totalHmAllocated}/{pendingLevelUp.hmPoints}
                     </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {(["ATK", "DEF", "INI", "AIM"] as const).map((key) => (
-                        <div key={`hm-alloc-${key}`} className="flex items-center gap-2">
-                          <p className="w-12">{key}</p>
-                          <input
-                            type="number"
-                            min={0}
-                            className="px-2 py-1 rounded w-full"
-                            value={hmAlloc[key]}
-                            onInput={(e) => {
-                              const value = Math.max(0, Number((e.currentTarget as HTMLInputElement).value || 0));
-                              setHmAlloc((prev) => ({ ...prev, [key]: value }));
-                            }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {levelUpStep === 2 ? (
-                  <div className="flex flex-col gap-2 min-h-0">
-                    <p className="text-sm">
-                      Allocate Secondary Skill points: {totalSecondaryAllocated}/{pendingLevelUp.secondarySkillPoints}
-                    </p>
-                    <div className="max-h-[320px] overflow-auto border border-slate-500 rounded p-1">
-                      {buildSecondaryStatDisplayRows(
-                        selectedCharacter.secondaryStats || [],
-                        selectedCharacter.level?.current || 1
-                      ).length === 0 ? (
-                        <p>No secondary stats available.</p>
-                      ) : (
-                        buildSecondaryStatDisplayRows(
-                          selectedCharacter.secondaryStats || [],
-                          selectedCharacter.level?.current || 1
-                        ).map((row) => (
-                          <div key={`sec-alloc-${row.current.id}`} className="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-2 items-center mb-1">
-                            <p>{row.name}</p>
-                            <input
-                              type="number"
-                              min={0}
-                              className="px-2 py-1 rounded w-full"
-                              value={secondaryAlloc[row.current.id] ?? 0}
-                              onInput={(e) => {
-                                const value = Math.max(0, Number((e.currentTarget as HTMLInputElement).value || 0));
-                                setSecondaryAlloc((prev) => ({ ...prev, [row.current.id]: value }));
-                              }}
-                            />
-                          </div>
-                        ))
-                      )}
-                    </div>
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr>
+                          <th className="text-left p-1">HM</th>
+                          <th className="text-right p-1">Jelenlegi</th>
+                          <th className="text-right p-1">+</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(["ATK", "DEF", "INI", "AIM"] as const).map((key) => (
+                          <tr key={`hm-alloc-${key}`} className="border-t border-slate-400/30">
+                            <td className="p-1">{key}</td>
+                            <td className="p-1 text-right">
+                              {Number(selectedCharacter.hm?.[key] || 0)}
+                            </td>
+                            <td className="p-1">
+                              <input
+                                type="number"
+                                min={0}
+                                className="px-2 py-1 rounded w-full text-right"
+                                value={hmAlloc[key]}
+                                onInput={(e) => {
+                                  const value = Math.max(0, Number((e.currentTarget as HTMLInputElement).value || 0));
+                                  setHmAlloc((prev) => ({ ...prev, [key]: value }));
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 ) : null}
                 {levelUpStep === 3 ? (
@@ -1660,6 +1706,7 @@ export default function CharacterPage({
                     specs={selectedClassDef?.specs || []}
                     spells={selectedClassDef?.spells || []}
                     selected={specializationChoice}
+                    levelCap={spellVisibilityCap}
                     isMobile={isMobileLayout}
                     onSelect={(specName) => {
                       setSpecializationChoice(specName);
@@ -1680,22 +1727,21 @@ export default function CharacterPage({
                           return 1;
                         }
                         if (prev === 1) return 0;
-                        if (prev === 2) return 1;
-                        return 2;
+                        return 1;
                       });
                     }}
                     disabled={levelUpStep === 0}
                   >
-                    Previous
+                    Vissza
                   </button>
                   <div className="flex gap-2 flex-wrap">
-                    {levelUpStep < (needsSpecializationSelection ? 3 : 2) ? (
+                    {levelUpStep < (needsSpecializationSelection ? 3 : 1) ? (
                       <button
                         type="button"
                         className="fancy-container px-2 py-1"
                         onClick={() => {
                           if (levelUpStep === 0 && !canGoNextFromHp) {
-                            setLevelUpError("Fill valid HP and Resource values for each level.");
+                            setLevelUpError("Adj meg érvényes ÉP értéket minden szinthez.");
                             return;
                           }
                           if (levelUpStep === 0 && selectedClassDef) {
@@ -1708,37 +1754,37 @@ export default function CharacterPage({
                             );
                             const invalidResource = levelHpRows.some(
                               (r) =>
-                                Number(r.resource) < resourceRange.minTotal ||
-                                Number(r.resource) > resourceRange.maxTotal
+                                hasResourceLevelUpRoll &&
+                                (Number(r.resource) < resourceRange.minTotal ||
+                                  Number(r.resource) > resourceRange.maxTotal)
                             );
                             if (invalidHp || invalidResource) {
                               setLevelUpError(
-                                `HP range: ${hpRange.minTotal}-${hpRange.maxTotal}, Resource range: ${resourceRange.minTotal}-${resourceRange.maxTotal}`
+                                hasResourceLevelUpRoll
+                                  ? `ÉP tartomány: ${hpRange.minTotal}-${hpRange.maxTotal}, erőforrás tartomány: ${resourceRange.minTotal}-${resourceRange.maxTotal}`
+                                  : `ÉP tartomány: ${hpRange.minTotal}-${hpRange.maxTotal}`
                               );
                               return;
                             }
                           }
                           if (levelUpStep === 1 && !canGoNextFromHm) {
                             setLevelUpError(
-                              `HM points must be fully allocated (${totalHmAllocated}/${pendingLevelUp.hmPoints}).`
+                              `A HM pontokat teljesen el kell költeni (${totalHmAllocated}/${pendingLevelUp.hmPoints}).`
                             );
                             return;
                           }
                           setLevelUpError("");
                           setLevelUpStep((prev) => {
                             if (!needsSpecializationSelection) {
-                              if (prev >= 2) return 2;
-                              if (prev === 0) return 1;
-                              return 2;
+                              return 1;
                             }
                             if (prev >= 3) return 3;
                             if (prev === 0) return 1;
-                            if (prev === 1) return 2;
                             return 3;
                           });
                         }}
                       >
-                        Next
+                        Tovább
                       </button>
                     ) : (
                       <button
@@ -1746,7 +1792,7 @@ export default function CharacterPage({
                         className="fancy-container px-2 py-1"
                         onClick={applyLevelUpWizard}
                       >
-                        Save
+                        Mentés
                       </button>
                     )}
                   </div>
@@ -1759,14 +1805,6 @@ export default function CharacterPage({
     </div>
   );
 }
-
-
-
-
-
-
-
-
 
 
 

@@ -89,7 +89,7 @@ function UserHandling() {
         <>
           <SelectUnq
             id={"admin-userSelect"}
-            label={"Select User"}
+            label={"Felhasználó kiválasztása"}
             value={
               isEmptySelection
                 ? {
@@ -98,7 +98,7 @@ function UserHandling() {
                   }
                 : isNewSelection
                 ? {
-                    label: selectedUserData?.name || "New User",
+                    label: selectedUserData?.name || "Új felhasználó",
                     value: selectedUserData?.uid || "new",
                   }
                 : {
@@ -131,7 +131,7 @@ function UserHandling() {
               ...users.map((user, index) => {
                 if (index === 0)
                   return {
-                    label: "New User",
+                    label: "Új felhasználó",
                     value: "new",
                   };
                 return {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, JSX, memo, useMemo, useCallback } from "preact/compat";
+﻿import { useEffect, useRef, useState, JSX, memo, useMemo, useCallback } from "preact/compat";
 import { TSetState } from "./utils/common";
 import { LoginForm } from "./pages/Login";
 import Character from "./pages/Character/Character";
@@ -39,10 +39,8 @@ import {
   Visibility,
 } from "./app/navigation";
 import { setCookie } from "./utils/common";
-import { useSseContext } from "./contexts/sseContext";
-
-const transTime = "1000";
-import { useAdventureSseSubscription, useSseSubscription } from "./hooks/sse";
+import { useLiveEventsContext } from "./contexts/liveEventsContext";
+import { useAdventureLiveEventSubscription, useLiveEventSubscription } from "./hooks/liveEvents";
 import { debugLog } from "@/core/logger";
 import { ensurePushSubscription, getPushPermissionState, TPushPermissionState } from "@/utils/push";
 import { PresenceUIProvider, usePresenceUI } from "./contexts/presenceUIContext";
@@ -56,7 +54,9 @@ import {
   TChatPolicy,
 } from "./contexts/chatWindowsContext";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
+import AppModal from "./components/AppModal";
 
+const transTime = "1000";
 const MemoizedCharacter = memo(Character);
 const MemoizedAdventureGridView = memo(AdventureGridView);
 const LOGGED_IN_PAGES: PageState[] = [
@@ -102,7 +102,7 @@ function AppContent() {
   const [activeAdventureId, setActiveAdventureId] = useState("");
   const historyNavigationRef = useRef(false);
   const hasHydratedRouteRef = useRef(false);
-  const { connectGlobal, connectAdventure, disconnectAll } = useSseContext();
+  const { connectGlobal, connectAdventure, disconnectAll } = useLiveEventsContext();
 
   const updatePSt = (change: Change) => {
     setTransitioning({
@@ -282,6 +282,7 @@ function UIElement(props: {
   const [adventureRequest] = useRequest(Application.REQUEST_CONTROLLER.ADVENTURES);
   const [chatRequest] = useRequest(Application.REQUEST_CONTROLLER.CHAT);
   const [pushRequest] = useRequest(Application.REQUEST_CONTROLLER.PUSH);
+  const [restRequest] = useRequest(Application.REQUEST_CONTROLLER.REST);
   const isSuperAdmin = user?.json?.rank === User.USER_RANK.SUPERADMIN;
   const isAdmin =
     isSuperAdmin ||
@@ -299,6 +300,9 @@ function UIElement(props: {
   );
   const [allChatUsers, setAllChatUsers] = useState<Array<{ uid: string; name: string }>>([]);
   const [vendorPhaseEnabled, setVendorPhaseEnabled] = useState(false);
+  const [bugReportOpen, setBugReportOpen] = useState(false);
+  const [bugReportContent, setBugReportContent] = useState("");
+  const [bugReportBusy, setBugReportBusy] = useState(false);
   const phaseSyncRef = useRef(0);
   const initiativePopupKeyRef = useRef("");
   const maybeShowInitiativePopupRef = useRef<
@@ -427,6 +431,28 @@ function UIElement(props: {
       });
   }, [pushRequest, refreshPushPermission, setError]);
 
+  const submitBugReport = useCallback(() => {
+    const content = bugReportContent.trim();
+    if (!content) {
+      setError("A hibajelentés szövege kötelező.");
+      return;
+    }
+    setBugReportBusy(true);
+    restRequest<{ ok: boolean }, ServerApi.RestRoutes.SubmitBugReportBody>({
+      endPoint: "/submitBugReport",
+      body: { content },
+    })
+      .then(() => {
+        setBugReportContent("");
+        setBugReportOpen(false);
+        setError("Hibajelentés elküldve.");
+      })
+      .catch((error) => {
+        setError("Failed to send bug report: " + error);
+      })
+      .finally(() => setBugReportBusy(false));
+  }, [bugReportContent, restRequest, setError]);
+
   useEffect(() => {
     refreshPushPermission();
     if (typeof window === "undefined") return;
@@ -519,22 +545,22 @@ function UIElement(props: {
       });
   }, [isLoggedIn]);
 
-  useSseSubscription("user:online", (event) => {
+  useLiveEventSubscription("user:online", (event) => {
     const payload = (event.payload || {}) as { uid?: string; name?: string };
     setOnlineBadges((prev) => applyPresenceEvent(prev, payload, "upsert"));
   });
 
-  useSseSubscription("user:offline", (event) => {
+  useLiveEventSubscription("user:offline", (event) => {
     const payload = (event.payload || {}) as { uid?: string };
     setOnlineBadges((prev) => applyPresenceEvent(prev, payload, "remove"));
   });
 
-  useSseSubscription("user:logout", (event) => {
+  useLiveEventSubscription("user:logout", (event) => {
     const payload = (event.payload || {}) as { uid?: string };
     setOnlineBadges((prev) => applyPresenceEvent(prev, payload, "remove"));
   });
 
-  useSseSubscription("user:active", (event) => {
+  useLiveEventSubscription("user:active", (event) => {
     const payload = (event.payload || {}) as { uid?: string; name?: string; active?: boolean };
     const uid = String(payload.uid || "");
     if (!uid) return;
@@ -543,7 +569,7 @@ function UIElement(props: {
     setOnlineBadges((prev) => applyPresenceEvent(prev, payload, "active"));
   });
 
-  useSseSubscription("connected", (event) => {
+  useLiveEventSubscription("connected", (event) => {
     if (event.scope !== "global") return;
     const payload = (event.payload || {}) as {
       onlineUsers?: Array<{ uid: string; name: string; active: boolean }>;
@@ -564,7 +590,7 @@ function UIElement(props: {
       return next;
     });
   });
-  useAdventureSseSubscription(
+  useAdventureLiveEventSubscription(
     "connected",
     activeAdventureId,
     (payload: {
@@ -587,7 +613,7 @@ function UIElement(props: {
       }
     }
   );
-  useAdventureSseSubscription(
+  useAdventureLiveEventSubscription(
     "combat:state",
     activeAdventureId,
     (payload: {
@@ -603,10 +629,10 @@ function UIElement(props: {
       maybeShowInitiativePopup(payload);
     }
   );
-  useAdventureSseSubscription("vendor:state", activeAdventureId, (payload: Vendor.TVendorState) => {
+  useAdventureLiveEventSubscription("vendor:state", activeAdventureId, (payload: Vendor.TVendorState) => {
     setVendorPhaseEnabled(Boolean(payload.enabled));
   });
-  useAdventureSseSubscription(
+  useAdventureLiveEventSubscription(
     "chat:policy",
     activeAdventureId,
     (payload: {
@@ -657,16 +683,6 @@ function UIElement(props: {
       keepStateAcrossPages: true,
       launcherGroup: "general",
     }),
-    defineWindowRegistration({
-      id: "SSE Debug",
-      kind: "sse-debug",
-      title: "SSE Debug",
-      icon: "SSE",
-      defaultOpen: false,
-      allowedPages: LOGGED_IN_PAGES,
-      keepStateAcrossPages: true,
-      launcherGroup: "general",
-    }),
     ...(isAdmin
       ? [
           defineWindowRegistration({
@@ -682,8 +698,18 @@ function UIElement(props: {
           }),
         ]
       : []),
-        ...(isSuperAdmin
+    ...(isSuperAdmin
       ? [
+          defineWindowRegistration({
+            id: "Élő események",
+            kind: "live-events-debug",
+            title: "Élő események",
+            icon: "LIVE",
+            defaultOpen: false,
+            allowedPages: LOGGED_IN_PAGES,
+            keepStateAcrossPages: true,
+            launcherGroup: "admin",
+          }),
           defineWindowRegistration({
             id: "Dev",
             kind: "dev-page",
@@ -733,6 +759,13 @@ function UIElement(props: {
   const shortcuts: IWindowsLayerShortcut[] = useMemo(() => [
     ...(isLoggedIn
       ? [
+          {
+            name: "Hiba jelentése",
+            icon: <>HIBA</>,
+            launcherGroup: "general" as const,
+            className: "font-bold text-[10px]",
+            onClick: () => setBugReportOpen(true),
+          } as IWindowsLayerShortcut,
           {
             name:
               pushPermission === "granted"
@@ -969,10 +1002,49 @@ function UIElement(props: {
               shortcuts={shortcuts}
               onlineUsers={onlineUserBadgesWithAll}
               currentPage={pSt}
+              blockedWindowNames={isSuperAdmin ? [] : ["Élő események"]}
             >
               <SharedAdventureNotesWindowBridge activeAdventureId={activeAdventureId} />
               <YnevWindowBridge activeAdventureId={activeAdventureId} />
               <ChatWindowRegistryBridge />
+              {bugReportOpen ? (
+                <AppModal
+                  id="bug-report-modal"
+                  label="Hiba jelentése"
+                  widthClass="w-[min(520px,95vw)]"
+                  actions={
+                    <>
+                      <button
+                        type="button"
+                        className="fancy-container px-2 py-1"
+                        disabled={bugReportBusy}
+                        onClick={() => {
+                          setBugReportOpen(false);
+                          setBugReportContent("");
+                        }}
+                      >
+                        Close
+                      </button>
+                      <button
+                        type="button"
+                        className="fancy-container px-2 py-1"
+                        disabled={bugReportBusy || !bugReportContent.trim()}
+                        onClick={submitBugReport}
+                      >
+                        {bugReportBusy ? "Küldés..." : "Send"}
+                      </button>
+                    </>
+                  }
+                >
+                  <textarea
+                    className="min-h-[180px] w-full resize-y rounded p-2 text-black"
+                    value={bugReportContent}
+                    placeholder="Write what went wrong..."
+                    disabled={bugReportBusy}
+                    onInput={(event) => setBugReportContent(event.currentTarget.value)}
+                  />
+                </AppModal>
+              ) : <></>}
               {((pSt === PageState.ADMIN || pSt === PageState.DEV) &&
                 returnPage !== null && (
                   <FlexRow className="absolute left-6 top-6 z-50">
@@ -998,9 +1070,9 @@ function UIElement(props: {
                     const previousPage = getNextPageState(pSt, Change.DEC);
                     if (pSt === PageState.ADMIN || previousPage === PageState.LOGIN) {
                       setPopup({
-                        label: "Logout",
+                        label: "Kilépés",
                         text: "Are you sure you want to logout?",
-                        save: "Logout",
+                        save: "Kilépés",
                         saveCallback: () => {
                           userRequest<User.IUserDataServer>({
                             endPoint: "/logout",
@@ -1094,7 +1166,7 @@ function SharedAdventureNotesWindowBridge({
 
   useEffect(() => {
     const createNotesWindow = (
-      name: "Shared Notes" | "Private Notes",
+      name: "Közös krónika" | "Private Notes",
       kind: "shared-notes" | "private-notes",
       icon: "NT" | "PN"
     ): IWindowsLayerWindowProps => defineWindowRegistration({
@@ -1112,7 +1184,7 @@ function SharedAdventureNotesWindowBridge({
       launcherGroup: "page",
     });
     const windowDefs = [
-      createNotesWindow("Shared Notes", "shared-notes", "NT"),
+      createNotesWindow("Közös krónika", "shared-notes", "NT"),
       createNotesWindow("Private Notes", "private-notes", "PN"),
     ];
 
@@ -1182,3 +1254,4 @@ function YnevWindowBridge({
 
   return null;
 }
+

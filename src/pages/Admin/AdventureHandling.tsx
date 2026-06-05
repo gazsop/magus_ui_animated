@@ -43,7 +43,7 @@ const parseWorldDateTime = (value: string): number | null => {
 const newAdv = {
   id: "0",
   json: {
-    name: "New Adventure",
+    name: "Új kalandmodul",
     worldDateStart: nowWorldDateTime(),
     worldDateCurrent: nowWorldDateTime(),
   },
@@ -139,7 +139,7 @@ function AdventureHandling() {
       return { label: "", value: "" };
     if (isNewSelection)
       return {
-        label: selectedAdventure.json.name || "New Adventure",
+        label: selectedAdventure.json.name || "Új kalandmodul",
         value: selectedAdventure.id || "0",
       };
     return { label: selectedAdventure.json.name, value: selectedAdventure.id };
@@ -152,7 +152,7 @@ function AdventureHandling() {
       </label>
       <SelectUnq
         id={"adventures-list"}
-        label={"Select Adventure"}
+        label={"Kaland kiválasztása"}
         value={getSelectValue()}
         onChange={(e: SingleValue<{ label: string; value: string }>) => {
           if (!e) return;
@@ -164,7 +164,7 @@ function AdventureHandling() {
           ...adventures.map((adventure, index) => {
                 if (index === 0)
                   return {
-                    label: "New Adventure",
+                    label: "Új kalandmodul",
                 value: "0",
               };
             return {
@@ -205,7 +205,7 @@ function AdventureHandling() {
           />
           <InputUnq
             id={`world-start-${selectedAdventure.id}`}
-            label={"Start Date (YYYY.MM.DD HH:mm)"}
+            label={"Kezdődátum"}
             value={isEmptySelection ? "" : selectedStart}
             onBlur={(e) => {
               if (isEmptySelection) return;
@@ -225,7 +225,7 @@ function AdventureHandling() {
           />
           <InputUnq
             id={`world-current-${selectedAdventure.id}`}
-            label={"Current Date (YYYY.MM.DD HH:mm)"}
+            label={"Aktuális dátum"}
             value={isEmptySelection ? "" : selectedCurrent}
             onBlur={(e) => {
               if (isEmptySelection) return;

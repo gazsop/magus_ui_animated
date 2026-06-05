@@ -26,7 +26,7 @@ const renderAnnotatedValue = (base: JSX.Element | string, annotation: string) =>
 export default function SecondaryStatsTable({
   stats,
   currentLevel,
-  emptyText = "No secondary skills.",
+  emptyText = "Nincsenek képzettségek.",
   className = "",
   tableClassName = "",
   renderLevelCell,
@@ -43,10 +43,10 @@ export default function SecondaryStatsTable({
       <table className={`w-full table-fixed border-collapse text-xs ${tableClassName}`}>
         <thead className="sticky top-0 fancy-container">
           <tr>
-            <th className={`text-left p-0.5 ${hasActions ? "w-[34%]" : "w-[46%]"}`}>Name</th>
-            <th className={`text-left p-0.5 ${hasActions ? "w-[24%]" : "w-[24%]"}`}>Level</th>
-            <th className={`text-right p-0.5 ${hasActions ? "w-[18%]" : "w-[16%]"}`}>Skill</th>
-            {hasActions ? <th className="text-left p-0.5 w-[24%]">Add</th> : null}
+            <th className={`text-left p-0.5 ${hasActions ? "w-[34%]" : "w-[46%]"}`}>Név</th>
+            <th className={`text-left p-0.5 ${hasActions ? "w-[24%]" : "w-[24%]"}`}>Szint</th>
+            <th className={`text-right p-0.5 ${hasActions ? "w-[18%]" : "w-[16%]"}`}>Képzettség</th>
+            {hasActions ? <th className="text-left p-0.5 w-[24%]">Hozzáadás</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -76,7 +76,9 @@ export default function SecondaryStatsTable({
                   ? renderAnnotatedValue(renderSkillCell(row), row.futureSkillText)
                   : row.skillText}
               </td>
-              {hasActions ? <td className="p-0.5 min-w-0 align-top">{renderActionCell(row)}</td> : null}
+              {hasActions ? (
+                <td className="p-0.5 min-w-0 align-top">{renderActionCell(row)}</td>
+              ) : null}
             </tr>
           ))}
         </tbody>

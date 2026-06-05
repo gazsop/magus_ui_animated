@@ -125,7 +125,7 @@ export default function VendorHandlingWindow({ close, requestData, setError }: T
     >
     <div className="grow w-full min-w-0 min-h-0 fancy-container p-2 flex flex-col gap-2 overflow-hidden text-sm">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">Vendors</h2>
+        <h2 className="text-lg font-semibold">Kalmárok</h2>
         <button className="fancy-container px-2 py-1" onClick={() => { setSelectedId(""); setDraft(emptyVendor()); }}>
           New
         </button>
@@ -143,34 +143,34 @@ export default function VendorHandlingWindow({ close, requestData, setError }: T
           ))}
         </div>
         <div className="fancy-container p-2 min-h-0 overflow-y-auto flex flex-col gap-2">
-          <input className="border rounded text-black p-1" placeholder="NPC vendor name" value={draft.name} onInput={(e) => setDraft((p) => ({ ...p, name: e.currentTarget.value }))} />
+          <input className="border rounded text-black p-1" placeholder="NJK kereskedő neve" value={draft.name} onInput={(e) => setDraft((p) => ({ ...p, name: e.currentTarget.value }))} />
           <div className="grid grid-cols-2 gap-2">
-            <label className="flex flex-col gap-1">Sell rate<input type="number" step="0.01" min={0} className="border rounded text-black p-1" value={draft.sellRate} onInput={(e) => setDraft((p) => ({ ...p, sellRate: Number(e.currentTarget.value || 0) }))} /></label>
-            <label className="flex flex-col gap-1">Buy rate<input type="number" step="0.01" min={0} className="border rounded text-black p-1" value={draft.buyRate} onInput={(e) => setDraft((p) => ({ ...p, buyRate: Number(e.currentTarget.value || 0) }))} /></label>
+            <label className="flex flex-col gap-1">Eladási szorzó<input type="number" step="0.01" min={0} className="border rounded text-black p-1" value={draft.sellRate} onInput={(e) => setDraft((p) => ({ ...p, sellRate: Number(e.currentTarget.value || 0) }))} /></label>
+            <label className="flex flex-col gap-1">Vételi szorzó<input type="number" step="0.01" min={0} className="border rounded text-black p-1" value={draft.buyRate} onInput={(e) => setDraft((p) => ({ ...p, buyRate: Number(e.currentTarget.value || 0) }))} /></label>
           </div>
           <div className="flex gap-1 flex-wrap">
             <select className="border rounded text-black p-1 min-w-[220px]" value={selectedItemName} onChange={(e) => setSelectedItemName(e.currentTarget.value)}>
-              <option value="">Select item</option>
+              <option value="">Tárgy kiválasztása</option>
               {items.map((item) => <option value={item.name}>{item.name}</option>)}
             </select>
-            <button className="fancy-container px-2 py-1" type="button" onClick={addSelectedItem}>Assign item</button>
+            <button className="fancy-container px-2 py-1" type="button" onClick={addSelectedItem}>Tárgy hozzárendelése</button>
           </div>
           <table className="w-full border-collapse text-xs">
-            <thead><tr><th className="text-left">Item</th><th>Price</th><th>Stock</th><th></th></tr></thead>
+            <thead><tr><th className="text-left">Tárgy</th><th>Ár / érték</th><th>Készlet</th><th></th></tr></thead>
             <tbody>
               {(draft.items || []).map((entry, index) => (
                 <tr>
                   <td className="pr-2">{entry.item.name}</td>
                   <td><MoneyAddInput id={`vendor-item-price-${index}`} valueCopper={entry.priceCopper} onChange={(nextCopper) => setDraft((p) => ({ ...p, items: p.items.map((x, i) => i === index ? { ...x, priceCopper: nextCopper } : x) }))} /></td>
                   <td><input type="number" min={0} className="w-20 border rounded text-black p-1" value={entry.stock} onInput={(e) => setDraft((p) => ({ ...p, items: p.items.map((x, i) => i === index ? { ...x, stock: Math.max(0, Number(e.currentTarget.value || 0)) } : x) }))} /></td>
-                  <td><button className="fancy-container px-2 py-1" type="button" onClick={() => setDraft((p) => ({ ...p, items: p.items.filter((_, i) => i !== index) }))}>Remove</button></td>
+                  <td><button className="fancy-container px-2 py-1" type="button" onClick={() => setDraft((p) => ({ ...p, items: p.items.filter((_, i) => i !== index) }))}>Eltávolítás</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
           <div className="flex justify-end gap-1">
-            <button className="fancy-container px-2 py-1" type="button" disabled={busy || !draft.id} onClick={deleteVendor}>Delete</button>
-            <button className="fancy-container px-2 py-1" type="button" disabled={busy || !draft.name.trim()} onClick={save}>Save</button>
+            <button className="fancy-container px-2 py-1" type="button" disabled={busy || !draft.id} onClick={deleteVendor}>Törlés</button>
+            <button className="fancy-container px-2 py-1" type="button" disabled={busy || !draft.name.trim()} onClick={save}>Mentés</button>
           </div>
         </div>
       </div>

@@ -643,7 +643,7 @@ export const TabComponent = ({
               id={tabInputIdRef.current}
               value=""
               onChange={() => {}}
-              placeholder="Tab name"
+              placeholder="Fül neve"
               className="grow"
               widthOverride="w-full"
               ref={inputRef}

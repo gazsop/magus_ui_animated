@@ -1,10 +1,10 @@
-import { createContext, JSX } from "preact";
+﻿import { createContext, JSX } from "preact";
 import { useContext, useEffect, useRef, useState } from "preact/hooks";
 import { Application, Character } from "@shared/contracts";
 import RndContainer from "@components/RndContainer";
 import useError from "@hooks/error";
 import useRequest from "@hooks/request";
-import { useAdventureSseSubscription } from "@hooks/sse";
+import { useAdventureLiveEventSubscription } from "@hooks/liveEvents";
 import { IWindowsLayerWindowProps } from "@pages/WindowsLayer";
 import { PageState } from "@/app/navigation";
 import { parseCharacterPayload } from "@pages/Character/utils/characterPayload";
@@ -215,7 +215,7 @@ export function AdminAdventureCharactersProvider({
       .finally(() => setIsLoading(false));
   }, [advId]);
 
-  useAdventureSseSubscription(
+  useAdventureLiveEventSubscription(
     "character:updated",
     advId,
     (payload: {
@@ -288,3 +288,4 @@ export function AdminAdventureCharacterDataDescriptorWindow({
   const { renderCharacterDataWindow } = useAdminAdventureCharacters();
   return renderCharacterDataWindow(advId, uid, title, close, classes);
 }
+

@@ -57,7 +57,7 @@ export default function ItemHoverCard({
       <hr className="fancy my-1" />
       <div className="flex flex-col gap-0.5">
         {(showEffectHm || showPrimary || showWeaponDamages) && (
-          <p className="font-semibold">Stat modifiers</p>
+          <p className="font-semibold">Tulajdonságmódosítók</p>
         )}
         <p>HM: {formatHmCompact(baseHm)}</p>
         {showEffectHm ? <p>Effect HM: {formatHmCompact(effectHm)}</p> : null}

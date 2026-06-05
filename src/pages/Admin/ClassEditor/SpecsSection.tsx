@@ -21,11 +21,11 @@ export default function SpecsSection({
 
   return (
     <FlexCol>
-      <label>Specs</label>
+      <label>Specializációk</label>
       <FlexRow className="grow">
         <InputUnq
           id={`char-input-spec-name-${selectedSpec.name}`}
-          label="Name"
+          label="Név"
           value={selectedSpec.name || ""}
           onBlur={(e) => {
             const target = e.target as HTMLInputElement;
@@ -36,7 +36,7 @@ export default function SpecsSection({
         />
         <TextAreaUnq
           id={`char-input-spec-descr-${selectedSpec.name}`}
-          label="description"
+          label="leírás"
           value={selectedSpec.description || ""}
           onSave={(e) => {
             if (e === selectedSpec.description) return;
@@ -65,7 +65,7 @@ export default function SpecsSection({
             <FlexRow>
               <InputUnq
                 id={`char-input-spec-${spec.name}`}
-                label="Name"
+                label="Név"
                 value={spec.name}
                 disabled={false}
                 onBlur={(e) => {
@@ -82,7 +82,7 @@ export default function SpecsSection({
               />
               <TextAreaUnq
                 id={`char-input-spec-descr-${spec.name}`}
-                label="Description"
+                label="Leírás"
                 value={spec.description || ""}
                 disabled={false}
                 onSave={(e) => {

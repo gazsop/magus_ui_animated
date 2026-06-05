@@ -83,7 +83,7 @@ export default function SecondaryStatListEditor({
         />
         <SelectUnq
           id={`${idPrefix}-level`}
-          label="level"
+          label="szint"
           optionData={Object.values(Character.SECONDARY_STAT_LEVEL).map((value) => ({
             value,
             label: value,
@@ -104,7 +104,7 @@ export default function SecondaryStatListEditor({
         />
         <InputUnq
           id={`${idPrefix}-skill`}
-          label="skill"
+          label="képzettség"
           value={selectedStat.skill}
           onBlur={(e) => {
             setSelectedStat((prev) => ({
@@ -116,7 +116,7 @@ export default function SecondaryStatListEditor({
         />
         <InputUnq
           id={`${idPrefix}-lvlReq`}
-          label="lvlReq"
+          label="szintkövetelmény"
           value={selectedStat.lvlReq}
           onBlur={(e) => {
             setSelectedStat((prev) => ({
@@ -128,7 +128,7 @@ export default function SecondaryStatListEditor({
         />
         <InputUnq
           id={`${idPrefix}-note`}
-          label="note"
+          label="jegyzet"
           value={selectedStat.note || ""}
           onBlur={(e) => {
             setSelectedStat((prev) => ({
@@ -170,7 +170,7 @@ export default function SecondaryStatListEditor({
             />
             <SelectUnq
               id={`${idPrefix}-item-level-${index}`}
-              label="level"
+              label="szint"
               optionData={Object.values(Character.SECONDARY_STAT_LEVEL).map((value) => ({
                 value,
                 label: value,
@@ -190,7 +190,7 @@ export default function SecondaryStatListEditor({
             />
             <InputUnq
               id={`${idPrefix}-item-lvlReq-${index}`}
-              label="lvlReq"
+              label="szintkövetelmény"
               value={stat.lvlReq}
               onBlur={(e) => {
                 updateStat(index, {
@@ -202,7 +202,7 @@ export default function SecondaryStatListEditor({
             />
             <InputUnq
               id={`${idPrefix}-item-skill-${index}`}
-              label="skill"
+              label="képzettség"
               value={stat.skill}
               onBlur={(e) => {
                 updateStat(index, {
@@ -214,7 +214,7 @@ export default function SecondaryStatListEditor({
             />
             <InputUnq
               id={`${idPrefix}-item-note-${index}`}
-              label="note"
+              label="jegyzet"
               value={stat.note || ""}
               onBlur={(e) => {
                 updateStat(index, {

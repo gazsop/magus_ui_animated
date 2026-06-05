@@ -1,20 +1,20 @@
 import { ServerApi } from "@shared/contracts";
 import { useEffect } from "preact/hooks";
-import { useSseContext } from "../contexts/sseContext";
+import { useLiveEventsContext } from "../contexts/liveEventsContext";
 
-type TSseEnvelope = {
+type TLiveEventEnvelope = {
   type: string;
-  scope: "global" | "adventure";
+  scope: "global" | "adventure" | "chat";
   advId?: string;
   timestamp: number;
   payload?: unknown;
 };
 
-export function useSseSubscription(
+export function useLiveEventSubscription(
   eventType: string,
-  handler: (event: TSseEnvelope) => void
+  handler: (event: TLiveEventEnvelope) => void
 ) {
-  const { subscribe } = useSseContext();
+  const { subscribe } = useLiveEventsContext();
   useEffect(() => subscribe(eventType, handler), [eventType, handler, subscribe]);
 }
 
@@ -33,13 +33,13 @@ const getPayloadAdvId = (payload: unknown): string => {
   return "";
 };
 
-export function useAdventureSseSubscription<TPayload = unknown>(
+export function useAdventureLiveEventSubscription<TPayload = unknown>(
   eventType: string,
   advId: string,
-  handler: (payload: TPayload, event: TSseEnvelope, eventAdvId: string) => void
+  handler: (payload: TPayload, event: TLiveEventEnvelope, eventAdvId: string) => void
 ) {
-  useSseSubscription(eventType, (event) => {
-    if (event.scope !== "adventure") return;
+  useLiveEventSubscription(eventType, (event) => {
+    if (event.scope === "global") return;
     const payload = (event.payload || {}) as TPayload;
     const eventAdvId = getPayloadAdvId(payload) || String(event.advId || "");
     if (!eventAdvId || !advId || eventAdvId !== advId) return;
@@ -51,7 +51,7 @@ export function useSyncStatusSubscription(
   advId: string,
   handler: (payload: ServerApi.EventRoutes.PongSyncStatus) => void
 ) {
-  useSseSubscription("sync:status", (event) => {
+  useLiveEventSubscription("sync:status", (event) => {
     const payload = event.payload as ServerApi.EventRoutes.PongSyncStatus | undefined;
     if (!payload?.advId || !advId || payload.advId !== advId) return;
     handler(payload);

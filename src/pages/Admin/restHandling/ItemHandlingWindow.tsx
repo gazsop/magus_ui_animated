@@ -394,7 +394,7 @@ export default function ItemHandlingWindow({
 
   const deleteItem = (item: Character.Item.TItem) => {
     setPopup({
-      label: "Delete item",
+      label: "Tárgy törlése",
       text: `Delete item "${item.name}"?`,
       save: "Delete",
       saveCallback: () => confirmDeleteItem(item),

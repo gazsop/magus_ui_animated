@@ -13,7 +13,7 @@ export default function SecondaryStatInitialsSection({
 }) {
   return (
     <SecondaryStatListEditor
-      title="Secondary Stat initial"
+      title="Kezdő képzettségpont"
       idPrefix="descent-secondary-initial"
       stats={selectedDescent.modifiers.secondaryStatScalings}
       toInt={toInt}

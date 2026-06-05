@@ -103,7 +103,7 @@ export function LoginForm(props: { loginToInterface: () => void }) {
       <FlexCol>
         <CheckBoxUnq
           id="remember"
-          label="Remember me"
+          label="Jegyezz meg"
           widthOverride="w-full px-2"
           ref={keepLoggedRef}
           onChange={(e) => {
@@ -111,7 +111,7 @@ export function LoginForm(props: { loginToInterface: () => void }) {
           }}
           value={false}
         />
-        <button className="py-[3px] px-[7px] w-40 lg:w-60">Submit</button>
+        <button className="py-[3px] px-[7px] w-40 lg:w-60">Küldés</button>
       </FlexCol>
     </form>
   );

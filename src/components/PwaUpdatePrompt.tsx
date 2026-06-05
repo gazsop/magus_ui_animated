@@ -37,7 +37,7 @@ export default function PwaUpdatePrompt() {
     >
       <div className="flex flex-col gap-3 p-3">
         <div>
-          <p className="text-sm font-bold">Update available</p>
+          <p className="text-sm font-bold">Új javítótekercs érkezett</p>
           <p className="mt-1 text-xs leading-5 text-amber-100">
             A new MAGUS version is ready. Reload to use it.
           </p>
