@@ -25,7 +25,11 @@ import { useDataContext } from "@contexts/dataContext";
 import { useState } from "preact/hooks";
 import { TSetState } from "@/utils/common";
 import { Adventure, Character } from "@shared/contracts";
-import { formatRoll as formatSharedRoll } from "@shared/game";
+import {
+  formatRoll as formatSharedRoll,
+  formatSpellCost,
+  getFirstAvailableSpellUpgrade,
+} from "@shared/game";
 import { ButtonUnq } from "@components/GeneralElements";
 import ClassSwordMasterIcon from "@components/icons/magus/ClassSwordMasterIcon";
 import useError from "@hooks/error";
@@ -410,8 +414,8 @@ function NewCharacter({
                 {selectedClass.spells.map((spell) => (
                   <div className={`p-1`}>
                     <p>
-                      {spell.name}, lvl: {spell.lvlReq},ktg.:
-                      {spell.resourceCost}
+                      {spell.name}, lvl: {spell.lvlReq}, ktg.:{" "}
+                      {formatSpellCost(getFirstAvailableSpellUpgrade(spell)?.cost)}
                     </p>
                     <p>{spell.description}</p>
                   </div>
@@ -450,7 +454,6 @@ function NewCharacter({
 }
 
 export default NewCharacter;
-
 
 
 

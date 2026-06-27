@@ -23,7 +23,7 @@ type TLauncherButtonProps = {
 const LauncherButton = (props: TLauncherButtonProps) => (
   <FlexRow
     key={props.keyId}
-    className={`fancy-container h-[35px] m-0.5 cursor-pointer items-center pl-2 relative select-none ${
+    className={`fancy-container min-h-[30px] h-[30px] sm:min-h-[35px] sm:h-[35px] w-8 sm:w-10 m-0.5 cursor-pointer items-center justify-center relative select-none text-[10px] sm:text-xs font-semibold ${
       props.className ?? ""
     }`}
     style={{ borderRadius: "17px 0px 0px 17px", ...(props.style ?? {}) }}
@@ -34,7 +34,7 @@ const LauncherButton = (props: TLauncherButtonProps) => (
     {props.children}
     {props.pinned ? (
       <span
-        className="absolute bottom-[4px] right-[4px] text-[10px] leading-none"
+        className="absolute bottom-[3px] right-[3px] text-[8px] sm:text-[10px] leading-none"
         title="Kitűzve"
       >
         P
@@ -42,7 +42,7 @@ const LauncherButton = (props: TLauncherButtonProps) => (
     ) : null}
     {props.notification ? (
       <span
-        className="absolute top-[4px] right-[4px] w-2 h-2 rounded-full bg-red-500"
+        className="absolute top-[3px] right-[3px] w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-500"
         title="Új üzenet"
       />
     ) : null}
@@ -56,7 +56,7 @@ export const PresenceBar = memo(function PresenceBar(props: {
 }) {
   if (props.onlineUsers.length === 0) return null;
   return (
-    <FlexCol className="gap-0.5">
+    <FlexCol className="gap-0.5 items-end">
       {props.onlineUsers.map((onlineUser) => {
         const status = onlineUser.status ?? (onlineUser.active ? "active" : "inactive");
         const statusClass =
@@ -71,7 +71,7 @@ export const PresenceBar = memo(function PresenceBar(props: {
           <LauncherButton
             key={`${onlineUser.uid}-online-badge`}
             keyId={`${onlineUser.uid}-online-badge`}
-            className={`justify-center font-bold text-xs ${statusClass}`}
+            className={`font-bold ${statusClass}`}
             style={onlineUser.style}
             title={`${onlineUser.name} (${statusLabel})`}
             onClick={() => {
@@ -128,7 +128,7 @@ export const LauncherBar = memo(function LauncherBar(props: {
   );
 
   return (
-    <FlexCol className="gap-0.5">
+    <FlexCol className="gap-0.5 items-end">
       {(props.groups ?? ["chat", "page", "admin", "general"])
         .filter((group) => {
           const segment = grouped[group];

@@ -20,6 +20,7 @@ const xOff = {
 
 const MIN_WINDOW_SIZE = 240;
 const LOCK_STORAGE_PREFIX = "rnd-window-lock:";
+const WINDOW_CONTROL_CANCEL_CLASS = "rnd-window-control";
 
 export const RndWindowControlsContext = createContext<{
   minimize?: () => void;
@@ -228,6 +229,7 @@ function RndContainer({
           className ? className + " " : ""
         }flex flex-col border border-black pointer-events-auto`}
         dragHandleClassName="rnd-window-drag-handle"
+        cancel={`.${WINDOW_CONTROL_CANCEL_CLASS}`}
         disableDragging={locked}
         enableResizing={!locked}
         resizeGrid={[20, 20]}
@@ -246,7 +248,7 @@ function RndContainer({
             <FlexRow className={`fancy-container touch-none`}>
               {aditionalIcons}
               <RefreshCwIcon
-                className="h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer"
+                className={`${WINDOW_CONTROL_CANCEL_CLASS} h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer`}
                 onClick={() => {
                   bringToFront();
                   setWindowPosition({ x: getXOff(), y: getYOff() });
@@ -258,7 +260,7 @@ function RndContainer({
                 }}
               />
               <span
-                className="cursor-pointer"
+                className={`${WINDOW_CONTROL_CANCEL_CLASS} cursor-pointer`}
                 onClick={() => {
                   bringToFront();
                   setLocked((prev) => !prev);
@@ -271,12 +273,15 @@ function RndContainer({
                 />
               </span>
               {effectiveMinimize ? (
-                <span onClick={effectiveMinimize}>
+                <span className={WINDOW_CONTROL_CANCEL_CLASS} onClick={effectiveMinimize}>
                   <MinimizeIcon className="h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer" />
                 </span>
               ) : null}
               {!hideClose && (
-                <XIcon className="h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer" onClick={close} />
+                <XIcon
+                  className={`${WINDOW_CONTROL_CANCEL_CLASS} h-5 sm:h-4 m-1 w-7 sm:w-6 cursor-pointer`}
+                  onClick={close}
+                />
               )}
             </FlexRow>
           </FlexRow>

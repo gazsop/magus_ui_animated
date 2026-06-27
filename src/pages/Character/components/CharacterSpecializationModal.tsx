@@ -1,7 +1,8 @@
 import { Character } from "@shared/contracts";
 import { useEffect, useMemo, useState } from "preact/hooks";
+import { formatSpellCost, getFirstAvailableSpellUpgrade } from "@shared/game";
 
-type TSpellPreview = Character.Spell.TSpellElements | Character.Spell.ISpellLevel;
+type TSpellPreview = Character.Spell.TSpellElements;
 
 const normalizeText = (value: unknown): string => String(value || "").trim();
 
@@ -19,7 +20,6 @@ const flattenSpecSpells = (
   levelCap: number
 ): TSpellPreview[] =>
   spells
-    .flatMap((spell) => [spell, ...(spell.levels || [])])
     .filter((spell) => spellMatchesSpec(spell, specName))
     .filter((spell) => spellIsVisibleAtCap(spell, levelCap))
     .sort((a, b) => Number(a.lvlReq || 0) - Number(b.lvlReq || 0));
@@ -86,10 +86,13 @@ export default function CharacterSpecializationModal({
               <div key={`spec-spell-${specName}-${spell.id}`} className="rounded border border-slate-600 p-1">
                 <p className="font-semibold text-sm break-words">
                   {spell.name}
-                  {"rank" in spell && spell.rank ? ` r${spell.rank}` : ""}
                 </p>
                 <p className="text-xs opacity-80">
-                  Level {spell.lvlReq} | Cost {spell.resourceCost}
+                  Level {spell.lvlReq} | {spell.activation} | Cost{" "}
+                  {formatSpellCost(getFirstAvailableSpellUpgrade(spell)?.cost)}
+                </p>
+                <p className="text-xs opacity-80">
+                  {spell.schools?.length ? spell.schools.join(", ") : "-"}
                 </p>
                 {spell.description ? (
                   <p className="text-xs break-words mt-0.5">{spell.description}</p>

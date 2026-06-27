@@ -4,7 +4,13 @@ import { TRpFieldDescriptor, isRpFieldFilled } from "@pages/Character/utils/rpWi
 
 export type TRpWizardStep =
   | { kind: "name" }
-  | { kind: "primary"; statName: Character.PRIMARY_STATS; label: string; rollText: string }
+  | {
+      kind: "primary";
+      statName: Character.PRIMARY_STATS;
+      label: string;
+      roll: Adventure.TRollElements;
+      rollText: string;
+    }
   | { kind: "hm"; key: keyof Character.THm; label: string }
   | { kind: "rp"; field: TRpFieldDescriptor }
   | { kind: "languages" };
@@ -27,6 +33,7 @@ export const buildWizardSteps = (
     kind: "primary" as const,
     statName: s.name,
     label: s.name,
+    roll: s.roll!,
     rollText: formatRoll(s.roll),
   })),
   ...hmKeys.map((hm) => ({ kind: "hm" as const, key: hm.key, label: hm.label })),

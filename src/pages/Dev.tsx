@@ -10,6 +10,16 @@ import { formatClientDateTime } from "@/core/datetime";
 import { useDataContext } from "@/contexts/dataContext";
 import { ensurePushSubscription } from "@/utils/push";
 import AppModal from "@components/AppModal";
+import {
+  createEmptySpellUpgrades,
+  createSpellUpgrade,
+  normalizeSpellName,
+  parseSpellActivation,
+  parseSpellChoice,
+  parseSpellLevelRequirement,
+  parseSpellSchools,
+  SPELL_MILESTONE_LEVELS,
+} from "@shared/game";
 
 type TErrorLogRow = {
   id?: number;
@@ -117,6 +127,17 @@ export default function Dev() {
       .filter(Boolean)),
   ];
 
+  const inferSpellType = (
+    name: string,
+    description: string,
+    schools: Character.Spell.TSpellSchool[]
+  ): Character.Spell.TSpellType => {
+    const text = `${name} ${description} ${schools.join(" ")}`.toLowerCase();
+    if (text.includes("gyógy") || text.includes("gyogy") || text.includes("regen")) return "heal";
+    if (text.includes("sebez") || text.includes("sebzés") || text.includes("sebzes")) return "damage";
+    return "utility";
+  };
+
   const normalizeImportedSpell = (
     input: unknown,
     index: number
@@ -127,26 +148,105 @@ export default function Dev() {
     const raw = input as Partial<Character.Spell.TSpellElements>;
     const name = String(raw.name || "").trim();
     if (!name) throw new Error(`Spell at index ${index} is missing name`);
+    const schools = Array.isArray(raw.schools)
+      ? raw.schools
+      : parseSpellSchools(raw.raw?.schools || "");
     return {
       id: String(raw.id || `${Date.now()}-${index}`),
       name,
       lvlReq: Math.max(0, Number(raw.lvlReq || 0)),
       description: String(raw.description || ""),
-      resourceCost: Math.max(0, Number(raw.resourceCost || 0)),
-      spec: spellImportSpec,
+      spec: String(raw.spec || spellImportSpec || "common"),
       imgSrc: raw.imgSrc ? String(raw.imgSrc) : undefined,
-      passive: Boolean(raw.passive),
       type:
         raw.type === "heal" || raw.type === "utility" || raw.type === "damage"
           ? raw.type
-          : "damage",
-      nrOfTurns: Math.max(0, Number(raw.nrOfTurns || 0)),
-      nrOfTurnsToCast: Math.max(0, Number(raw.nrOfTurnsToCast || 0)),
-      range: Math.max(0, Number(raw.range || 0)),
-      class: raw.class || Character.Spell.SPELL_CLASSES.FIRE,
-      parentId: String(raw.parentId || "0"),
-      levels: Array.isArray(raw.levels) ? raw.levels : [],
+          : inferSpellType(name, String(raw.description || ""), schools),
+      activation: parseSpellActivation(raw.activation || raw.raw?.activation || ""),
+      schools,
+      upgrades: Array.isArray(raw.upgrades) && raw.upgrades.length
+        ? SPELL_MILESTONE_LEVELS.map((level) => {
+            const existing = raw.upgrades?.find((upgrade) => Number(upgrade.level) === level);
+            return createSpellUpgrade(level, existing?.raw || "-");
+          })
+        : createEmptySpellUpgrades(),
+      choice: raw.choice,
+      raw: raw.raw,
     };
+  };
+
+  const parseSpellCsvLine = (line: string): string[] => {
+    const cells: string[] = [];
+    let current = "";
+    let quoted = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const char = line[i];
+      const next = line[i + 1];
+      if (char === '"' && next === '"') {
+        current += '"';
+        i += 1;
+        continue;
+      }
+      if (char === '"') {
+        quoted = !quoted;
+        continue;
+      }
+      if (char === ";" && !quoted) {
+        cells.push(current.trim());
+        current = "";
+        continue;
+      }
+      current += char;
+    }
+    cells.push(current.trim());
+    return cells;
+  };
+
+  const parseSpellCsv = (text: string): Character.Spell.TSpellElements[] => {
+    const spells: Character.Spell.TSpellElements[] = [];
+    let currentSpec = spellImportSpec || "common";
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((line, index) => {
+        const cells = parseSpellCsvLine(line);
+        const rawName = cells[0] || "";
+        if (!rawName) return;
+        if (rawName.toUpperCase().startsWith("PAPLOVAG -")) {
+          currentSpec = rawName.split("-").slice(1).join("-").trim() || currentSpec;
+          return;
+        }
+        const lvlReq = parseSpellLevelRequirement(rawName);
+        const name = normalizeSpellName(rawName);
+        const activationRaw = cells[8] || "";
+        const schoolsRaw = cells[10] || "";
+        const description = cells[11] || "";
+        const schools = parseSpellSchools(schoolsRaw);
+        const upgrades = SPELL_MILESTONE_LEVELS.map((level, upgradeIndex) =>
+          createSpellUpgrade(level, cells[upgradeIndex + 2] || "-")
+        );
+        const choice = parseSpellChoice(rawName);
+        spells.push({
+          id: `${Date.now()}-${index}`,
+          name,
+          lvlReq,
+          description,
+          spec: (cells[9] || currentSpec || "common").trim(),
+          type: inferSpellType(name, description, schools),
+          activation: parseSpellActivation(activationRaw),
+          schools,
+          upgrades,
+          choice,
+          raw: {
+            name: rawName,
+            activation: activationRaw,
+            schools: schoolsRaw,
+            baseScaling: cells[1] || "",
+          },
+        });
+      });
+    return spells;
   };
 
   const importSpells = async () => {
@@ -159,20 +259,23 @@ export default function Dev() {
       return;
     }
     if (!spellImportFile) {
-      setError("Select a spell JSON file before importing.");
+      setError("Select a spell JSON or CSV file before importing.");
       return;
     }
 
     try {
       setSpellImportBusy(true);
       const text = await spellImportFile.text();
-      const parsed = JSON.parse(text) as unknown;
-      const rawSpells = Array.isArray(parsed) ? parsed : [parsed];
-      const importedSpells = rawSpells.map((spell, index) =>
-        normalizeImportedSpell(spell, index)
-      );
+      const isCsv = spellImportFile.name.toLowerCase().endsWith(".csv");
+      const importedSpells = isCsv
+        ? parseSpellCsv(text)
+        : (() => {
+            const parsed = JSON.parse(text) as unknown;
+            const rawSpells = Array.isArray(parsed) ? parsed : [parsed];
+            return rawSpells.map((spell, index) => normalizeImportedSpell(spell, index));
+          })();
       if (importedSpells.length < 1) {
-        setError("Spell JSON did not contain any spells.");
+        setError("Spell file did not contain any spells.");
         return;
       }
 
@@ -597,10 +700,10 @@ export default function Dev() {
           </select>
         </div>
         <div className="flex flex-col gap-0.5">
-          <label>Spell JSON</label>
+          <label>Spell JSON/CSV</label>
           <input
             type="file"
-            accept="application/json,.json"
+            accept="application/json,text/csv,.json,.csv"
             className="text-black px-2 py-1 rounded"
             onChange={(e) => {
               const file = (e.currentTarget as HTMLInputElement).files?.[0] || null;
@@ -834,4 +937,3 @@ export default function Dev() {
     </FlexCol>
   );
 }
-

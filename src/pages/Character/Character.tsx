@@ -164,7 +164,7 @@ export default function CharacterPage({
       initialized: false,
       level: {
         current: 1,
-        currentXp: 0,
+        currentXp: 1,
       },
       descent: Character.DESCENTS.HUMAN,
       class: Character.CLASSES.WARRIOR,
@@ -245,6 +245,7 @@ export default function CharacterPage({
   const [hasCharacterRecord, setHasCharacterRecord] = useState<boolean>(
     expectExistingCharacter
   );
+  const [shouldAutoStartRpWizard, setShouldAutoStartRpWizard] = useState(false);
 
   const [characterRequest] = useRequest(
     Application.REQUEST_CONTROLLER.CHARACTERS
@@ -287,6 +288,9 @@ export default function CharacterPage({
       setSelectedCharacter(parsedCharacter);
       setComputedCharacter(parsed.computed);
       setCharacterHash(nextHash);
+      setHasCharacterRecord(true);
+      setHasCheckedCharacterRecord(true);
+      if (parsedCharacter.initialized) setShouldAutoStartRpWizard(false);
       return parsedCharacter;
     },
     []
@@ -309,6 +313,9 @@ export default function CharacterPage({
 
   const { setDisableNavArrows } = useUtilContext();
   const [isLoadingCharacter, setIsLoadingCharacter] = useState<boolean>(true);
+  const [hasCheckedCharacterRecord, setHasCheckedCharacterRecord] = useState<boolean>(
+    expectExistingCharacter
+  );
   const gridHostRef = useRef<HTMLDivElement>(null);
   const [gridSpec, setGridSpec] = useState({
     cols: 4,
@@ -710,9 +717,9 @@ export default function CharacterPage({
   const fetchCharacter = useCallback(async () => {
     if (!advId || !user?.uid) {
       setIsLoadingCharacter(false);
+      setHasCheckedCharacterRecord(true);
       return;
     }
-    setIsLoadingCharacter(true);
     return characterRequest<Character.TCharacterServer | Character.TCharacter>({
       endPoint: "/get",
       body: {
@@ -726,6 +733,7 @@ export default function CharacterPage({
       .then((response) => {
         const parsed = applyCharacterResponse(response.data);
         setIsLoadingCharacter(false);
+        setHasCheckedCharacterRecord(true);
         return parsed;
       })
       .catch((e) => {
@@ -734,6 +742,7 @@ export default function CharacterPage({
           setCharacterHash("");
           setComputedCharacter(null);
           setIsLoadingCharacter(false);
+          setHasCheckedCharacterRecord(true);
           return null;
         }
         setError("Failed to fetch character: " + e, {
@@ -742,6 +751,7 @@ export default function CharacterPage({
         });
         debugLog(e);
         setIsLoadingCharacter(false);
+        setHasCheckedCharacterRecord(true);
         return null;
       });
   }, [advId, user?.uid, hasCharacterRecord, applyCharacterResponse]);
@@ -980,7 +990,8 @@ export default function CharacterPage({
   useEffect(() => {
     if (isLoadingCharacter) return;
     const targetPath = "/character";
-    if (window.location.pathname !== targetPath) {
+    const characterPaths = new Set([targetPath, "/character/new"]);
+    if (!characterPaths.has(window.location.pathname)) {
       window.history.replaceState({}, "", targetPath);
     }
   }, [isLoadingCharacter]);
@@ -1169,6 +1180,9 @@ export default function CharacterPage({
         hmBase={hmBaseForWizard}
         hmInitialPoints={hmInitialPointsForWizard}
         disabled={selectedCharacter.initialized}
+        autoStartWizard={
+          shouldAutoStartRpWizard && hasCharacterRecord && !selectedCharacter.initialized
+        }
         onSave={async (nextRp, nextPrimaryStats, nextHm) => {
           const nextCharacter = {
             ...selectedCharacter,
@@ -1232,7 +1246,7 @@ export default function CharacterPage({
     { key: "damages", panel: characterPanels.damages },
   ];
 
-  if (!isLoadingCharacter && !hasCharacterRecord) {
+  if (hasCheckedCharacterRecord && !hasCharacterRecord) {
     return (
       <div className="grow fancy-container overflow-y-auto p-1 relative">
         <NewCharacter
@@ -1242,6 +1256,7 @@ export default function CharacterPage({
           onCharacterSaved={async (nextCharacter) => {
             await saveCharacter(nextCharacter, { createIfMissing: true });
             setHasCharacterRecord(true);
+            setShouldAutoStartRpWizard(true);
           }}
         />
       </div>
@@ -1325,12 +1340,7 @@ export default function CharacterPage({
           }}
         />
       ) : null}
-      {isLoadingCharacter && isMobileLayout ? (
-        <FlexRow className="w-full justify-center items-center p-2">
-          <p>Karakterlap idézése...</p>
-        </FlexRow>
-      ) : null}
-      {!isLoadingCharacter && hasCharacterRecord && isMobileLayout ? (
+      {hasCharacterRecord && isMobileLayout ? (
         <FlexCol className="relative z-10 gap-2 w-full min-w-0">
           {mobilePanelOrder.map((entry) => (
             <div
@@ -1355,17 +1365,9 @@ export default function CharacterPage({
           alignContent: "start",
         }}
       >
-      {isLoadingCharacter ? (
-        <GridItem x={1} y={1} colSpan={2} rowSpan={1}>
-          <FlexRow className="w-full justify-center items-center p-2">
-          <p>Karakterlap idézése...</p>
-        </FlexRow>
-        </GridItem>
-      ) : null}
-      {!isLoadingCharacter && (
+      {hasCharacterRecord && (
         <>
-          {!hasCharacterRecord ? null : (
-            <>
+          <>
               <GridItem
                 x={layout.header_xp.x}
                 y={layout.header_xp.y}
@@ -1472,6 +1474,9 @@ export default function CharacterPage({
                   hmBase={hmBaseForWizard}
                   hmInitialPoints={hmInitialPointsForWizard}
                   disabled={selectedCharacter.initialized}
+                  autoStartWizard={
+                    shouldAutoStartRpWizard && hasCharacterRecord && !selectedCharacter.initialized
+                  }
                   onSave={async (nextRp, nextPrimaryStats, nextHm) => {
                     const nextCharacter = {
                       ...selectedCharacter,
@@ -1551,8 +1556,7 @@ export default function CharacterPage({
               >
                 {damagesPanel}
               </GridItem>
-            </>
-          )}
+          </>
         </>
       )}
       </div>
@@ -1805,10 +1809,4 @@ export default function CharacterPage({
     </div>
   );
 }
-
-
-
-
-
-
 

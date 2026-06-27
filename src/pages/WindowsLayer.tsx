@@ -255,7 +255,7 @@ export const WindowsLayerProvider = (props: {
         selectWindow={selectWindow}
       />
       <FlexCol
-        className="fixed top-[10vh] bg-transparent w-10 sm:right-0 right-[10px] gap-1"
+        className="fixed top-[10vh] bg-transparent w-8 sm:w-10 sm:right-0 right-[10px] gap-1 max-h-[38vh] overflow-y-auto overflow-x-hidden"
         style={{ zIndex: "var(--layer-window-icons)" }}
       >
         <PresenceBar
@@ -272,7 +272,7 @@ export const WindowsLayerProvider = (props: {
         />
       </FlexCol>
       <FlexCol
-        className="fixed bottom-[10vh] bg-transparent w-10 sm:right-0 right-[10px] gap-1"
+        className="fixed bottom-[10vh] bg-transparent w-8 sm:w-10 sm:right-0 right-[10px] gap-1 max-h-[42vh] overflow-y-auto overflow-x-hidden"
         style={{ zIndex: "var(--layer-window-icons)" }}
       >
         <LauncherBar

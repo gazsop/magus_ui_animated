@@ -1,10 +1,18 @@
 import { Character } from "@shared/contracts";
-import { CheckBoxUnq, InputUnq, SelectUnq, TextAreaUnq } from "@components/GeneralElements";
+import {
+  createSpellUpgrade,
+  formatSpellCost,
+  formatSpellDuration,
+  SPELL_MILESTONE_LEVELS,
+  SPELL_SCHOOLS,
+} from "@shared/game";
+import { InputUnq, SelectUnq, TextAreaUnq } from "@components/GeneralElements";
 import { FlexCol, FlexRow } from "@components/Flex";
 import EditIcon from "@components/icons/general/EditIcon";
 import { memo, useEffect, useMemo, useState } from "preact/compat";
 import { ComponentChildren } from "preact";
 import { MutableRef } from "preact/hooks";
+import { MultiValue } from "react-select";
 import { toInt } from "@utils/common";
 
 const sanitizeHtml = (rawHtml: string) => {
@@ -34,18 +42,23 @@ const sanitizeHtml = (rawHtml: string) => {
   return template.innerHTML;
 };
 
+const normalizeUpgrades = (
+  upgrades?: Character.Spell.TSpellUpgrade[]
+): Character.Spell.TSpellUpgrade[] =>
+  SPELL_MILESTONE_LEVELS.map((level) => {
+    const existing = upgrades?.find((upgrade) => Number(upgrade.level) === level);
+    return createSpellUpgrade(level, existing?.raw || "-");
+  });
+
 const DescriptionElement = memo(function ({
   spell,
   onSave,
 }: {
-  spell: Character.Spell.TSpellElements | Character.Spell.ISpellLevel;
+  spell: Character.Spell.TSpellElements;
   onSave: (e: string) => void;
 }) {
   const [descriptionOpen, setDescriptionOpen] = useState(false);
-  const safeDescription = useMemo(
-    () => sanitizeHtml(spell.description || ""),
-    [spell.description]
-  );
+  const safeDescription = useMemo(() => sanitizeHtml(spell.description || ""), [spell.description]);
   return (
     <FlexCol>
       <FlexRow>
@@ -85,88 +98,60 @@ export const SpellsElement = memo(function ({
   spell,
   specs,
   spellsRef,
-  parentId,
   children,
   interactionBtns,
 }: {
-  spell: Character.Spell.TSpellElements | Character.Spell.ISpellLevel;
+  spell: Character.Spell.TSpellElements;
   specs: {
     name: string;
     description: string;
   }[];
   spellsRef: MutableRef<{
-    [key in string]:
-      | Character.Spell.TSpellElements
-      | Character.Spell.ISpellLevel;
+    [key in string]: Character.Spell.TSpellElements;
   }>;
-  parentId?: string;
   children?: ComponentChildren;
   interactionBtns: ComponentChildren;
 }) {
-  const [spellState, setSpellState] = useState<
-    Character.Spell.TSpellElements | Character.Spell.ISpellLevel
-  >(
-    "levels" in spell
-      ? (spell as Character.Spell.TSpellElements)
-      : (spell as Character.Spell.ISpellLevel)
-  );
+  const [spellState, setSpellState] = useState<Character.Spell.TSpellElements>({
+    ...spell,
+    upgrades: normalizeUpgrades(spell.upgrades),
+  });
 
   useEffect(() => {
-    const newSpell = {
-      ...spellState,
-      levels: undefined,
-      parentId: parentId || "0",
-    };
-    spellsRef.current[spellState.id] = newSpell;
+    spellsRef.current[spellState.id] = spellState;
     return () => {
       delete spellsRef.current[spellState.id];
     };
-  }, [parentId, spellState, spellsRef]);
+  }, [spellState, spellsRef]);
+
+  const schoolOptions = SPELL_SCHOOLS.map((school) => ({
+    value: school,
+    label: school,
+  }));
+
+  const setUpgradeRaw = (level: Character.Spell.TSpellMilestoneLevel, raw: string) => {
+    setSpellState((prev) => ({
+      ...prev,
+      upgrades: normalizeUpgrades(prev.upgrades).map((upgrade) =>
+        upgrade.level === level ? createSpellUpgrade(level, raw) : upgrade
+      ),
+    }));
+  };
 
   return (
-    <FlexCol className="fancy-container my-2">
-      <FlexRow
-        className={`${
-          "levels" in spellState && spellState.levels ? "bg-amber-900" : ""
-        }`}
-      >
-        <InputUnq
-          id={`char-input-rank-${spellState.id}`}
-          label="rang"
-          value={"rank" in spellState && spellState.rank ? spellState.rank : 1}
-          widthOverride="w-24"
-          layout="flex-col"
-          onInput={(e) => {
-            const target = e.target as HTMLInputElement;
-            const value = toInt(target.value);
-            if (value < 2) {
-              target.value = "2";
-              return;
-            }
-            setSpellState((prev) => ({ ...prev, rank: value }));
-          }}
-          onBlur={(e) => {
-            const target = e.target as HTMLInputElement;
-            const value = toInt(target.value);
-            if (value < 2) {
-              target.value = "2";
-              return;
-            }
-            setSpellState((prev) => ({ ...prev, rank: value }));
-          }}
-          disabled={parentId ? false : true}
-        />
+    <FlexCol className="fancy-container my-2 gap-2">
+      <FlexRow className="items-start">
         <InputUnq
           id={`char-input-spell-${spellState.id}`}
           label="név"
           value={spellState.name}
           layout="flex-col"
-          widthOverride="w-24"
+          widthOverride="w-36"
           onBlur={(e) => {
             const target = e.target as HTMLInputElement;
             setSpellState((prev) => ({ ...prev, name: target.value }));
           }}
-          className="grow w-24"
+          className="grow w-36"
         />
         <SelectUnq
           id={`char-select-spec-${spellState.id}`}
@@ -184,7 +169,7 @@ export const SpellsElement = memo(function ({
             value: spellState.spec,
           }}
           layout="flex-col"
-          widthOverride="w-24"
+          widthOverride="w-28"
         />
         <SelectUnq
           id={`char-select-type-${spellState.id}`}
@@ -197,10 +182,26 @@ export const SpellsElement = memo(function ({
           value={{ label: spellState.type, value: spellState.type }}
           onChange={(e) => {
             const val = e?.value as Character.Spell.TSpellType;
-            setSpellState((prev) => ({ ...prev, type: val }));
+            setSpellState((prev) => ({ ...prev, type: val || "damage" }));
           }}
           layout="flex-col"
           widthOverride="w-24"
+        />
+        <SelectUnq
+          id={`char-select-activation-${spellState.id}`}
+          label="aktiválás"
+          optionData={[
+            { value: "active", label: "active" },
+            { value: "passive", label: "passive" },
+            { value: "active-passive", label: "active-passive" },
+          ]}
+          value={{ label: spellState.activation, value: spellState.activation }}
+          onChange={(e) => {
+            const val = e?.value as Character.Spell.TSpellActivation;
+            setSpellState((prev) => ({ ...prev, activation: val || "active" }));
+          }}
+          layout="flex-col"
+          widthOverride="w-32"
         />
         <InputUnq
           id={`char-input-lvlReq-${spellState.id}`}
@@ -215,84 +216,42 @@ export const SpellsElement = memo(function ({
             setSpellState((prev) => ({ ...prev, lvlReq: value }));
           }}
         />
-        <InputUnq
-          id={`char-input-resourceCost-${spellState.id}`}
-          label="erőforrásköltség"
-          value={spellState.resourceCost}
-          type="number"
-          onBlur={(e) => {
-            const target = e.target as HTMLInputElement;
-            const value = toInt(target.value);
-            setSpellState((prev) => ({ ...prev, resourceCost: value }));
-          }}
-          layout="flex-col"
-          widthOverride="w-24"
-        />
-        <InputUnq
-          id={`char-input-nrOfTurnsToCast-${spellState.id}`}
-          label="varázslási körök száma"
-          value={spellState.nrOfTurnsToCast}
-          type="number"
-          onBlur={(e) => {
-            const target = e.target as HTMLInputElement;
-            const value = toInt(target.value);
-            setSpellState((prev) => ({ ...prev, nrOfTurnsToCast: value }));
-          }}
-          layout="flex-col"
-          widthOverride="w-24"
-        />
-        <InputUnq
-          id={`char-input-nrOfTurns-${spellState.id}`}
-          label="körök száma"
-          value={spellState.nrOfTurns}
-          type="number"
-          onBlur={(e) => {
-            const target = e.target as HTMLInputElement;
-            const value = toInt(target.value);
-            setSpellState((prev) => ({ ...prev, nrOfTurns: value }));
-          }}
-          layout="flex-col"
-          widthOverride="w-24"
-        />
-        <InputUnq
-          id={`char-input-range-${spellState.id}`}
-          label="hatótáv"
-          value={spellState.range}
-          type="number"
-          onBlur={(e) => {
-            const target = e.target as HTMLInputElement;
-            const value = toInt(target.value);
-            setSpellState((prev) => ({ ...prev, range: value }));
-          }}
-          layout="flex-col"
-          widthOverride="w-24"
-        />
-        <SelectUnq
-          id={`char-select-class-${spellState.id}`}
-          label="Varázslat típusa"
-          optionData={Object.keys(Character.Spell.SPELL_CLASSES).map((c) => ({
-            value: c,
-            label: c,
-          }))}
+        <SelectUnq<
+          Character.Spell.TSpellSchool,
+          MultiValue<{ value: Character.Spell.TSpellSchool; label: string }>
+        >
+          id={`char-select-schools-${spellState.id}`}
+          label="iskolák"
+          optionData={schoolOptions}
+          value={(spellState.schools || []).map((school) => ({ value: school, label: school }))}
           onChange={(e) => {
-            const val = e?.value as Character.Spell.SPELL_CLASSES;
-            setSpellState((prev) => ({ ...prev, class: val }));
+            setSpellState((prev) => ({
+              ...prev,
+              schools: [...e.map((entry) => entry.value)],
+            }));
           }}
-          value={{ label: spellState.class, value: spellState.class }}
           layout="flex-col"
-          widthOverride="w-24"
+          widthOverride="w-48"
+          multiple
         />
-        <CheckBoxUnq
-          id={`char-input-passive-${spellState.id}`}
-          label="passzív"
-          value={spellState.passive}
-          onChange={(e) => {
-            const target = e.target as HTMLInputElement;
-            const val = target.checked;
-            setSpellState((prev) => ({ ...prev, passive: val }));
-          }}
+        <InputUnq
+          id={`char-input-choice-${spellState.id}`}
+          label="választás"
+          value={spellState.choice?.label || ""}
           layout="flex-col"
-          widthOverride="w-24"
+          widthOverride="w-36"
+          onBlur={(e) => {
+            const value = (e.target as HTMLInputElement).value.trim();
+            setSpellState((prev) => ({
+              ...prev,
+              choice: value
+                ? {
+                    groupId: prev.choice?.groupId || `choice-${prev.id}`,
+                    label: value,
+                  }
+                : undefined,
+            }));
+          }}
         />
         <DescriptionElement
           spell={spellState}
@@ -301,6 +260,27 @@ export const SpellsElement = memo(function ({
           }}
         />
         {interactionBtns}
+      </FlexRow>
+      <FlexRow className="items-start">
+        {normalizeUpgrades(spellState.upgrades).map((upgrade) => (
+          <FlexCol key={`spell-upgrade-${spellState.id}-${upgrade.level}`} className="w-32">
+            <InputUnq
+              id={`char-input-spell-upgrade-${spellState.id}-${upgrade.level}`}
+              label={`lvl ${upgrade.level}`}
+              value={upgrade.raw}
+              layout="flex-col"
+              widthOverride="w-32"
+              onBlur={(e) => setUpgradeRaw(upgrade.level, (e.target as HTMLInputElement).value)}
+            />
+            <span className="text-xs opacity-70">
+              {upgrade.available ? (upgrade.stagnates ? "Stagnál" : "Elérhető") : "Nem elérhető"}
+            </span>
+            <span className="text-xs opacity-70">Költség: {formatSpellCost(upgrade.cost)}</span>
+            <span className="text-xs opacity-70">
+              Időtartam: {formatSpellDuration(upgrade.duration)}
+            </span>
+          </FlexCol>
+        ))}
       </FlexRow>
       {children}
     </FlexCol>

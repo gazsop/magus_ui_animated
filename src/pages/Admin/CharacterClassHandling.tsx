@@ -4,8 +4,6 @@ import { Adventure, Application, Character } from "@shared/contracts";
 import useRequest from "@hooks/request";
 import {
   ButtonUnq,
-  CheckBoxUnq,
-  HTMLOptionData,
   InputUnq,
   SelectUnq,
   TextAreaUnq,
@@ -27,28 +25,20 @@ import { debugLog } from "@/core/logger";
 import { isConflictError } from "@/core/api/httpClient";
 import { buildTopLevelDiffPatch } from "@/core/api/patch";
 import { nanoid } from "nanoid";
+import { createEmptySpellUpgrades } from "@shared/game";
 
 type TClassWithMeta = Character.TClass & { hash?: string };
 
-const createEmptySpell = (): Character.Spell.TSpellElements & {
-  descriptionOpen: boolean;
-  levels: Character.Spell.ISpellLevel[];
-} => ({
+const createEmptySpell = (): Character.Spell.TSpellElements => ({
   id: "0",
   name: "",
   lvlReq: 0,
   description: "",
   spec: "common",
-  levels: [],
-  resourceCost: 0,
-  passive: false,
   type: "damage",
-  nrOfTurns: 1,
-  nrOfTurnsToCast: 1,
-  descriptionOpen: false,
-  range: 0,
-  class: "" as Character.Spell.SPELL_CLASSES,
-  parentId: "0",
+  activation: "active",
+  schools: [],
+  upgrades: createEmptySpellUpgrades(),
 });
 
 const normalizeClassForEditor = (classData: TClassWithMeta): TClassWithMeta => ({
@@ -91,9 +81,7 @@ const ClassHandlingWindow = ({
   const baseClassRef = useRef(baseClass);
   const selectedClassRef = useRef(selectedClass);
   const spellsRef = useRef<{
-    [key in string]:
-      | Character.Spell.TSpellElements
-      | Character.Spell.ISpellLevel;
+    [key in string]: Character.Spell.TSpellElements;
   }>({});
   const secondaryStatRefs = useRef<Character.TSecondaryStat[]>([]);
   const [showSecondaryStats, setshowSecondaryStats] = useState(false);
@@ -134,30 +122,7 @@ const ClassHandlingWindow = ({
       const currentBase = baseClassRef.current;
       const currentClass = selectedClassRef.current;
       const mountedSpells = Object.keys(spellsRef.current);
-      const reconstructedSpells = mountedSpells
-        .map((s) => {
-          if (spellsRef.current[s].parentId !== "0") {
-            return null;
-          }
-          const levels = Object.keys(spellsRef.current)
-            .map((l) => {
-              if (
-                !("parentId" in spellsRef.current[l]) ||
-                !spellsRef.current[l].parentId ||
-                spellsRef.current[l].parentId !== s
-              ) {
-                return null;
-              }
-              return spellsRef.current[l] as Character.Spell.ISpellLevel;
-            })
-            .filter(Boolean) as Character.Spell.ISpellLevel[];
-          const spell = spellsRef.current[s] as Character.Spell.TSpellElements;
-          return {
-            ...spell,
-            levels,
-          };
-        })
-        .filter(Boolean) as Character.Spell.TSpellElements[];
+      const reconstructedSpells = mountedSpells.map((id) => spellsRef.current[id]);
 
       const newSelectedClass: Character.TClass = {
         ...currentClass,
@@ -272,6 +237,75 @@ const ClassHandlingWindow = ({
     );
 
     const Spells = () => {
+      const [newSpell, setNewSpell] = useState<Character.Spell.TSpellElements>(
+        createEmptySpell()
+      );
+      const newSpellRef = useRef<{ [key in string]: Character.Spell.TSpellElements }>({});
+
+      const addNewSpell = () => {
+        const draft = newSpellRef.current[newSpell.id] || newSpell;
+        if (!draft.name.trim()) return;
+        setSelectedClass((prev) => ({
+          ...prev,
+          spells: [
+            ...(prev.spells || []),
+            {
+              ...draft,
+              id: nanoid(),
+            },
+          ],
+        }));
+        setNewSpell(createEmptySpell());
+        newSpellRef.current = {};
+      };
+
+      return (
+        <FlexCol className="pb-10" id="spells">
+          <label>Varázslatok</label>
+          <FlexCol>
+            {selectedClass.spells &&
+              selectedClass.spells.map((spell) => (
+                <FlexCol key={`spell-root-${spell.id}`}>
+                  <SpellsElement
+                    spell={spell}
+                    specs={selectedClass.specs}
+                    spellsRef={spellsRef}
+                    interactionBtns={
+                      <ButtonUnq
+                        id={`char-remove-spell-${spell.id}`}
+                        onClick={() => {
+                          setSelectedClass((prev) => ({
+                            ...prev,
+                            spells: prev.spells.filter((s) => s.id !== spell.id),
+                          }));
+                        }}
+                        className="w-24 h-8"
+                      >
+                        Remove
+                      </ButtonUnq>
+                    }
+                  />
+                  <hr className="fancy" />
+                </FlexCol>
+              ))}
+            <SpellsElement
+              key={`new-spell-${newSpell.id}`}
+              spell={newSpell}
+              specs={selectedClass.specs}
+              spellsRef={newSpellRef}
+              interactionBtns={
+                <ButtonUnq id="char-add-spell" onClick={addNewSpell} className="w-24 h-8">
+                  Add
+                </ButtonUnq>
+              }
+            />
+          </FlexCol>
+        </FlexCol>
+      );
+    };
+
+    /*
+    const LegacySpells = () => {
       const [parentId, setParentId] = useState<string>("0");
 
       const [selectedSpell, setSelectedSpell] = useState<
@@ -822,6 +856,8 @@ const ClassHandlingWindow = ({
         </FlexCol>
       );
     };
+
+    */
 
     const Resource = () => {
       return (
@@ -1566,11 +1602,5 @@ function ClassHandling() {
 }
 
 export default ClassHandling;
-
-
-
-
-
-
 
 

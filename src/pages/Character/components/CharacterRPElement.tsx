@@ -33,6 +33,7 @@ export type TRPElementProps = {
   hmBase?: Character.THm;
   hmInitialPoints?: number;
   disabled: boolean;
+  autoStartWizard?: boolean;
   onSave: (
     rp: Character.TRpElements,
     primaryStats: Character.TPrimaryStat[],
@@ -51,6 +52,7 @@ export default function RPElement({
   hmBase,
   hmInitialPoints = 0,
   disabled,
+  autoStartWizard = false,
   onSave,
 }: TRPElementProps) {
   const safeRpData: Character.TRpElements = {
@@ -170,7 +172,7 @@ export default function RPElement({
   const hasPrimaryRollDefinitions = safePrimaryStats.some((stat) => !!stat.roll);
   const selectedBodyType = rpDraft.bioType || Character.BTYPE.MALE;
   useEffect(() => {
-    if (disabled || flowStartedRef.current) return;
+    if (!autoStartWizard || disabled || flowStartedRef.current) return;
     if (hasPendingPrimaryRollStats && !hasPrimaryRollDefinitions) return;
     flowStartedRef.current = true;
 
@@ -233,10 +235,7 @@ export default function RPElement({
           input: "",
           saveCallback: async (inputValue) => {
             const entered = Number(inputValue || "");
-            const currentStat = primaryStatsDraftRef.current.find(
-              (stat) => stat.name === step.statName
-            );
-            const statError = validatePrimaryStatFinalValue(entered, currentStat?.roll);
+            const statError = validatePrimaryStatFinalValue(entered, step.roll);
             if (statError) {
               openStep(index);
               setPopup((prev) =>
@@ -251,7 +250,7 @@ export default function RPElement({
             }
             const nextPrimary = primaryStatsDraftRef.current.map((stat) => {
               if (stat.name !== step.statName) return stat;
-              return { ...stat, val: entered };
+              return { ...stat, roll: step.roll, val: entered };
             });
             await persist(rpDraftRef.current, nextPrimary, hmDraftRef.current);
             openStep(index + 1);
@@ -490,6 +489,7 @@ export default function RPElement({
     religions,
     personalities,
     languageOptions,
+    autoStartWizard,
   ]);
 
   const rpInputClass = "w-full px-1";

@@ -4,6 +4,7 @@ import AppModal from "@components/AppModal";
 import ItemHoverCard from "@components/ItemHoverCard";
 import useRequest from "@hooks/request";
 import { Application, ServerApi } from "@shared/contracts";
+import { formatSpellCost, formatSpellDuration } from "@shared/game";
 
 type TParsedReference = {
   raw: string;
@@ -81,11 +82,20 @@ const SpellDetails = ({
     <p>{spell.description || "-"}</p>
     <div className="grid grid-cols-2 gap-1">
       <p>Szint: {spell.lvlReq || 0}</p>
-      <p>Költség: {spell.resourceCost || 0}</p>
-      <p>Hatótáv: {spell.range || "-"}</p>
-      <p>Időtartam: {spell.nrOfTurns || 0}</p>
       <p>Típus: {spell.type || "-"}</p>
-      <p>Mágiaforma: {spell.class || "-"}</p>
+      <p>Aktiválás: {spell.activation || "-"}</p>
+      <p>Spec: {spell.spec || "-"}</p>
+    </div>
+    <p>Mágiaforma: {spell.schools?.length ? spell.schools.join(", ") : "-"}</p>
+    {spell.choice ? <p>Választás: {spell.choice.label}</p> : null}
+    <div className="flex flex-col gap-0.5">
+      {(spell.upgrades || []).map((upgrade) => (
+        <p key={`chat-spell-upgrade-${spell.id}-${upgrade.level}`}>
+          Lvl {upgrade.level}:{" "}
+          {upgrade.available ? (upgrade.stagnates ? "Stagnál" : upgrade.raw) : "-"} | Költség:{" "}
+          {formatSpellCost(upgrade.cost)} | Időtartam: {formatSpellDuration(upgrade.duration)}
+        </p>
+      ))}
     </div>
   </div>
 );
